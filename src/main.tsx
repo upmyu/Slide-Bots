@@ -562,7 +562,13 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
   }
 
   function leaveToLobby(): void {
+    if (!window.confirm("ゲームを終了して初期画面に戻りますか？")) return;
     sendJson(ws, { type: "leaveRoom" });
+  }
+
+  function forceEndRound(): void {
+    if (!window.confirm("このラウンドを終了しますか？\n現在の最短提出が勝ちになります。")) return;
+    sendJson(ws, { type: "forceEndRound" });
   }
 
   const currentPlayer = state.players.find((player) => player.id === playerId);
@@ -606,7 +612,7 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
               </div>
             ) : null}
             {state.phase === "playing" ? (
-              <button className="secondary" onClick={() => sendJson(ws, { type: "forceEndRound" })}>
+              <button className="secondary" onClick={forceEndRound}>
                 <Flag size={18} /> ラウンド終了
               </button>
             ) : null}
