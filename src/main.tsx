@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { RotateCcw, Undo2, Copy, Play, Send, StepForward, Flag, LogOut, Loader2 } from "lucide-react";
 import { fixedBoard } from "./game/boards/fixedBoard";
 import { applyMove, detectSwipeDirection, isGoalReached, robotAt, sameCell } from "./game/rules";
+import { targetImageFor } from "./game/targetAssets";
 import { Board, ClientMessage, Move, PublicRoomState, RobotColor, RobotPositions, RoundResult, ServerMessage, Target, TargetColor, robotColors } from "./game/types";
 import "./styles.css";
 
@@ -186,6 +187,10 @@ function targetGlyph(target: Target): string {
   return "◎";
 }
 
+function targetLabel(target: Target): string {
+  return `${colorName[target.color]} ${targetGlyph(target)}`;
+}
+
 function BoardView({
   board,
   robots,
@@ -301,14 +306,17 @@ function BoardView({
         <rect key={`blocked-${cell.x}-${cell.y}`} x={cell.x + 0.05} y={cell.y + 0.05} width="0.9" height="0.9" className="blocked" />
       ))}
       {board.targets.map((item) => (
-        <text
+        <image
           key={`target-${item.x}-${item.y}-${item.color}-${item.shape}`}
-          x={item.x + 0.5}
-          y={item.y + 0.67}
-          className={`target ${item.color}`}
-        >
-          {targetGlyph(item)}
-        </text>
+          href={targetImageFor(item)}
+          x={item.x + 0.14}
+          y={item.y + 0.14}
+          width="0.72"
+          height="0.72"
+          className="target-image"
+          aria-label={targetLabel(item)}
+          preserveAspectRatio="xMidYMid meet"
+        />
       ))}
       <rect x={target.x + 0.08} y={target.y + 0.08} width="0.84" height="0.84" className="active-target" />
       {Object.entries(displayRobots).map(([color, cell]) => (
@@ -427,8 +435,8 @@ function GameControls({
 
   return (
     <section className="panel controls">
-      <div className="goal-cell" aria-label={round ? `目標: ${colorName[round.target.color]} ${targetGlyph(round.target)}` : "待機中"}>
-        {round ? <span className={`goal-marker ${round.target.color}`}>{targetGlyph(round.target)}</span> : <strong>待機中</strong>}
+      <div className="goal-cell" aria-label={round ? `目標: ${targetLabel(round.target)}` : "待機中"}>
+        {round ? <img className="goal-marker" src={targetImageFor(round.target)} alt="" /> : <strong>待機中</strong>}
       </div>
       <div>
         <span className="eyebrow">手数</span>

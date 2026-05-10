@@ -281,31 +281,8 @@ label {
   fill: #3b424a;
 }
 
-.target {
-  font-size: 0.55px;
-  font-weight: 900;
-  text-anchor: middle;
+.target-image {
   pointer-events: none;
-}
-
-.target.red {
-  fill: #d94a43;
-}
-
-.target.blue {
-  fill: #2d76bd;
-}
-
-.target.green {
-  fill: #2c8a61;
-}
-
-.target.yellow {
-  fill: #b98619;
-}
-
-.target.rainbow {
-  fill: #6b3fd9;
 }
 
 .active-target {
@@ -369,36 +346,14 @@ label {
 }
 
 .goal-marker {
-  display: inline-grid;
+  display: block;
   width: 42px;
   height: 42px;
-  place-items: center;
   border: 1px solid #c8d3dd;
   border-radius: 8px;
   background: #fff;
-  font-size: 1.45rem;
-  font-weight: 900;
-  line-height: 1;
-}
-
-.goal-marker.red {
-  color: #d94a43;
-}
-
-.goal-marker.blue {
-  color: #2d76bd;
-}
-
-.goal-marker.green {
-  color: #2c8a61;
-}
-
-.goal-marker.yellow {
-  color: #b98619;
-}
-
-.goal-marker.rainbow {
-  color: #6b3fd9;
+  object-fit: contain;
+  padding: 3px;
 }
 
 .controls strong {
