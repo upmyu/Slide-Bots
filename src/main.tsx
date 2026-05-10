@@ -70,6 +70,15 @@ function sendJson(ws: WebSocket | null, message: ClientMessage): void {
   if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
 }
 
+function roomIdFromLocation(): string {
+  const match = window.location.pathname.match(/^\/room\/([A-Z0-9]{4})$/i);
+  return match?.[1]?.toUpperCase() ?? "";
+}
+
+function savedRoomId(): string {
+  return roomIdFromLocation() || localStorage.getItem("slideBots.roomId") || "";
+}
+
 function displayPlayerName(name: string): string {
   return name.replace(/^Player ([A-Z0-9]{2})$/, "プレイヤー$1");
 }
@@ -85,12 +94,26 @@ function useSocket() {
     const socket = new WebSocket(wsUrl());
     setWs(socket);
 
+    socket.addEventListener("open", () => {
+      const savedPlayerId = localStorage.getItem("slideBots.playerId") ?? "";
+      const roomId = savedRoomId();
+      if (!savedPlayerId || !roomId) return;
+
+      sendJson(socket, {
+        type: "joinRoom",
+        roomId,
+        name: localStorage.getItem("slideBots.name") ?? "",
+        playerId: savedPlayerId
+      });
+    });
+
     socket.addEventListener("message", (event) => {
       const message = JSON.parse(event.data) as ServerMessage;
       if (message.type === "roomCreated" || message.type === "joinedRoom") {
         setPlayerId(message.playerId);
         localStorage.setItem("slideBots.playerId", message.playerId);
         localStorage.setItem("slideBots.roomId", message.state.roomId);
+        window.history.replaceState(null, "", `/room/${message.state.roomId}`);
         setState(message.state);
         setError("");
       }
@@ -279,7 +302,7 @@ function BoardView({
 
 function Lobby({ ws, playerId }: { ws: WebSocket | null; playerId: string }) {
   const [name, setName] = React.useState(localStorage.getItem("slideBots.name") ?? "");
-  const [roomId, setRoomId] = React.useState(localStorage.getItem("slideBots.roomId") ?? "");
+  const [roomId, setRoomId] = React.useState(savedRoomId());
 
   function remember(): void {
     localStorage.setItem("slideBots.name", name);
