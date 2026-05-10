@@ -50,6 +50,7 @@ function createWalls(): WallMask[] {
 
   [
     [2, 0, "E"],
+    [11, 0, "E"],
     [5, 1, "W"],
     [5, 1, "S"],
     [7, 2, "E"],
@@ -74,6 +75,7 @@ function createWalls(): WallMask[] {
     [3, 9, "E"],
     [12, 9, "N"],
     [12, 9, "W"],
+    [15, 9, "S"],
     [10, 10, "E"],
     [10, 10, "S"],
     [6, 11, "N"],
@@ -87,6 +89,7 @@ function createWalls(): WallMask[] {
     [4, 14, "S"],
     [11, 14, "W"],
     [11, 14, "S"],
+    [6, 15, "E"],
     [13, 15, "E"]
   ].forEach(([x, y, dir]) => addWall(x as number, y as number, dir as Direction));
 
