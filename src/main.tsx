@@ -593,6 +593,9 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
           <span className="eyebrow">残り時間</span>
           <strong>{round ? formatTime(round.deadline - now) : "--:--"}</strong>
         </div>
+        <button className="secondary topbar-end" onClick={leaveToLobby}>
+          <LogOut size={18} /> <span>ゲーム終了</span>
+        </button>
       </header>
 
       <section className="layout">
