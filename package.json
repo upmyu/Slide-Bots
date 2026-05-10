@@ -1,0 +1,29 @@
+{
+  "name": "slide-bots",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server/index.ts",
+    "build": "tsc --noEmit && vite build",
+    "preview": "tsx server/index.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
+    "vite": "^7.0.0",
+    "typescript": "^5.8.0",
+    "tsx": "^4.20.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "ws": "^8.18.0",
+    "lucide-react": "^0.468.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/ws": "^8.5.13",
+    "vitest": "^3.0.0"
+  }
+}
