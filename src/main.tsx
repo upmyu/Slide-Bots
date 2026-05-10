@@ -1,6 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { RotateCcw, Undo2, Copy, Play, Send, StepForward } from "lucide-react";
+import { RotateCcw, Undo2, Copy, Play, Send, StepForward, Flag, LogOut, Loader2 } from "lucide-react";
 import { fixedBoard } from "./game/boards/fixedBoard";
 import { applyMove, detectSwipeDirection, isGoalReached, robotAt, sameCell } from "./game/rules";
 import { Board, ClientMessage, Move, PublicRoomState, RobotColor, RobotPositions, RoundResult, ServerMessage, Target } from "./game/types";
@@ -130,6 +130,12 @@ function useSocket() {
       }
       if (message.type === "gameResult") {
         setNotice("ゲーム終了。");
+      }
+      if (message.type === "leftRoom") {
+        localStorage.removeItem("slideBots.roomId");
+        window.history.replaceState(null, "", "/");
+        setState(null);
+        setNotice("初期画面に戻りました。");
       }
       if (message.type === "error") {
         setError(message.message);
@@ -452,7 +458,14 @@ function GameResultView({ state }: { state: PublicRoomState }) {
 function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoomState; playerId: string }) {
   const round = state.currentRound;
   const [local, setLocal] = React.useState<LocalPlayState | null>(null);
+  const [isStarting, setIsStarting] = React.useState(false);
   const now = useNow();
+
+  React.useEffect(() => {
+    if (state.phase !== "waiting" || round) {
+      setIsStarting(false);
+    }
+  }, [round, state.phase]);
 
   React.useEffect(() => {
     if (!round) {
@@ -542,6 +555,16 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
     setLocal({ ...local, submittedMoveCount: local.moveHistory.length });
   }
 
+  function startGame(): void {
+    if (ws?.readyState !== WebSocket.OPEN) return;
+    setIsStarting(true);
+    sendJson(ws, { type: "startGame" });
+  }
+
+  function leaveToLobby(): void {
+    sendJson(ws, { type: "leaveRoom" });
+  }
+
   const currentPlayer = state.players.find((player) => player.id === playerId);
   const roomUrl = `${window.location.origin}/room/${state.roomId}`;
   const submitted = round?.submissionSummary.submittedPlayerIds.length ?? 0;
@@ -573,10 +596,23 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
             <span>{currentPlayer ? `あなた: ${displayPlayerName(currentPlayer.name)}` : "接続中"}</span>
             <span>送信済み: {submitted} / {state.players.length}</span>
             {state.phase === "waiting" ? (
-              <button onClick={() => sendJson(ws, { type: "startGame" })}>
+              <button onClick={startGame} disabled={isStarting}>
                 <Play size={18} /> 開始
               </button>
             ) : null}
+            {isStarting ? (
+              <div className="loading-status" role="status" aria-live="polite">
+                <Loader2 className="spin" size={16} /> ロード中...
+              </div>
+            ) : null}
+            {state.phase === "playing" ? (
+              <button className="secondary" onClick={() => sendJson(ws, { type: "forceEndRound" })}>
+                <Flag size={18} /> ラウンド終了
+              </button>
+            ) : null}
+            <button className="secondary" onClick={leaveToLobby}>
+              <LogOut size={18} /> ゲーム終了
+            </button>
           </section>
           {state.lastRoundResult ? <RoundResultView result={state.lastRoundResult} state={state} ws={ws} /> : null}
           {state.phase === "gameResult" ? <GameResultView state={state} /> : null}

@@ -109,6 +109,7 @@ export type ClientMessage =
   | { type: "createRoom"; name: string; playerId?: string }
   | { type: "joinRoom"; roomId: string; name: string; playerId?: string }
   | { type: "startGame" }
+  | { type: "forceEndRound" }
   | { type: "submitSolution"; moves: Move[] }
   | { type: "nextRound" }
   | { type: "leaveRoom" };
@@ -121,6 +122,7 @@ export type ServerMessage =
   | { type: "submissionRejected"; reason: string }
   | { type: "roundResult"; result: RoundResult }
   | { type: "gameResult"; result: GameResult }
+  | { type: "leftRoom" }
   | { type: "error"; message: string };
 
 export type SolverResult =

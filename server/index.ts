@@ -203,6 +203,10 @@ function toValidSubmission(round: NonNullable<RoomState["currentRound"]>, submis
 
 function finishRound(room: ManagedRoom): void {
   if (room.phase !== "playing" || !room.currentRound) return;
+  if (room.roundTimer) {
+    clearTimeout(room.roundTimer);
+    room.roundTimer = undefined;
+  }
 
   const round = room.currentRound;
   const validSubmissions = round.submissions
@@ -278,6 +282,15 @@ function submitSolution(room: ManagedRoom, playerId: string, moves: Move[], ws: 
   broadcast(room);
 }
 
+function leaveRoom(room: ManagedRoom, playerId: string, ws: WebSocket): void {
+  room.sockets.delete(playerId);
+  const player = room.players.find((candidate) => candidate.id === playerId);
+  if (player) player.connected = false;
+  clients.set(ws, { ws });
+  send(ws, { type: "leftRoom" });
+  broadcast(room);
+}
+
 function handleClientMessage(ws: WebSocket, raw: string): void {
   let message: ClientMessage;
   try {
@@ -303,12 +316,13 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
     return;
   }
   if (message.type === "startGame") startGame(room);
+  if (message.type === "forceEndRound") finishRound(room);
   if (message.type === "submitSolution") submitSolution(room, context.playerId, message.moves, ws);
   if (message.type === "nextRound" && room.phase === "roundResult" && room.currentRound) {
     startRound(room, room.currentRound.roundNumber + 1);
   }
   if (message.type === "leaveRoom") {
-    ws.close();
+    leaveRoom(room, context.playerId, ws);
   }
 }
 

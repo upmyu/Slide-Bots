@@ -207,6 +207,24 @@ label {
   font-size: 0.9rem;
 }
 
+.loading-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #41566c;
+  font-weight: 800;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .play-area {
   display: grid;
   min-height: 0;
