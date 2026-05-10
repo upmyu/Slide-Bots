@@ -13,6 +13,7 @@ type LocalPlayState = {
 };
 
 type RobotRenderPositions = Record<RobotColor, { x: number; y: number }>;
+type LobbyPendingAction = "create" | "join" | null;
 
 const colorLabel: Record<RobotColor, string> = {
   red: "R",
@@ -66,8 +67,22 @@ function wsUrl(): string {
   return `${protocol}://${window.location.host}/ws`;
 }
 
-function sendJson(ws: WebSocket | null, message: ClientMessage): void {
-  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+function sendJson(ws: WebSocket | null, message: ClientMessage): boolean {
+  if (ws?.readyState !== WebSocket.OPEN) return false;
+  ws.send(JSON.stringify(message));
+  return true;
+}
+
+function isSocketOpen(ws: WebSocket | null): boolean {
+  return ws?.readyState === WebSocket.OPEN;
+}
+
+function LoadingLabel({ label }: { label: string }) {
+  return (
+    <>
+      <Loader2 className="spin" size={16} /> {label}
+    </>
+  );
 }
 
 function roomIdFromLocation(): string {
@@ -85,6 +100,7 @@ function displayPlayerName(name: string): string {
 
 function useSocket() {
   const [ws, setWs] = React.useState<WebSocket | null>(null);
+  const [socketReady, setSocketReady] = React.useState(false);
   const [state, setState] = React.useState<PublicRoomState | null>(null);
   const [playerId, setPlayerId] = React.useState(localStorage.getItem("slideBots.playerId") ?? "");
   const [error, setError] = React.useState("");
@@ -95,6 +111,7 @@ function useSocket() {
     setWs(socket);
 
     socket.addEventListener("open", () => {
+      setSocketReady(true);
       const savedPlayerId = localStorage.getItem("slideBots.playerId") ?? "";
       const roomId = savedRoomId();
       if (!savedPlayerId || !roomId) return;
@@ -142,7 +159,10 @@ function useSocket() {
       }
     });
 
-    socket.addEventListener("close", () => setNotice("接続が切れました。再接続するには更新してください。"));
+    socket.addEventListener("close", () => {
+      setSocketReady(false);
+      setNotice("接続が切れました。再接続するには更新してください。");
+    });
     return () => socket.close();
   }, []);
 
@@ -158,7 +178,7 @@ function useSocket() {
     return () => window.clearTimeout(id);
   }, [error]);
 
-  return { ws, state, setState, playerId, error, setError, notice, setNotice };
+  return { ws, socketReady, state, setState, playerId, error, setError, notice, setNotice };
 }
 
 function targetGlyph(target: Target): string {
@@ -306,9 +326,19 @@ function BoardView({
   );
 }
 
-function Lobby({ ws, playerId }: { ws: WebSocket | null; playerId: string }) {
+function Lobby({ ws, socketReady, playerId, error }: { ws: WebSocket | null; socketReady: boolean; playerId: string; error: string }) {
   const [name, setName] = React.useState(localStorage.getItem("slideBots.name") ?? "");
   const [roomId, setRoomId] = React.useState(savedRoomId());
+  const [pendingAction, setPendingAction] = React.useState<LobbyPendingAction>(null);
+  const canSend = socketReady && isSocketOpen(ws);
+
+  React.useEffect(() => {
+    if (error) setPendingAction(null);
+  }, [error]);
+
+  React.useEffect(() => {
+    if (!canSend) setPendingAction(null);
+  }, [canSend]);
 
   function remember(): void {
     localStorage.setItem("slideBots.name", name);
@@ -326,12 +356,15 @@ function Lobby({ ws, playerId }: { ws: WebSocket | null; playerId: string }) {
       </label>
       <div className="join-actions">
         <button
+          disabled={!canSend || pendingAction !== null}
           onClick={() => {
             remember();
-            sendJson(ws, { type: "createRoom", name, playerId });
+            if (sendJson(ws, { type: "createRoom", name, playerId })) {
+              setPendingAction("create");
+            }
           }}
         >
-          <Play size={18} /> 部屋を作る
+          {pendingAction === "create" ? <LoadingLabel label="作成中..." /> : <><Play size={18} /> 部屋を作る</>}
         </button>
         <label>
           部屋コード
@@ -339,14 +372,22 @@ function Lobby({ ws, playerId }: { ws: WebSocket | null; playerId: string }) {
         </label>
         <button
           className="secondary"
+          disabled={!canSend || pendingAction !== null}
           onClick={() => {
             remember();
-            sendJson(ws, { type: "joinRoom", roomId, name, playerId });
+            if (sendJson(ws, { type: "joinRoom", roomId, name, playerId })) {
+              setPendingAction("join");
+            }
           }}
         >
-          参加
+          {pendingAction === "join" ? <LoadingLabel label="参加中..." /> : "参加"}
         </button>
       </div>
+      {!canSend ? (
+        <div className="loading-status" role="status" aria-live="polite">
+          <LoadingLabel label="接続中..." />
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -371,7 +412,8 @@ function GameControls({
   goalReached,
   onUndo,
   onReset,
-  onSubmit
+  onSubmit,
+  isSubmitting
 }: {
   state: PublicRoomState;
   local: LocalPlayState | null;
@@ -379,6 +421,7 @@ function GameControls({
   onUndo: () => void;
   onReset: () => void;
   onSubmit: () => void;
+  isSubmitting: boolean;
 }) {
   const now = useNow();
   const round = state.currentRound;
@@ -401,8 +444,8 @@ function GameControls({
         <button className="secondary icon" onClick={onReset} disabled={!round} title="リセット">
           <RotateCcw size={18} />
         </button>
-        <button onClick={onSubmit} disabled={!canSubmit}>
-          <Send size={18} /> 送信
+        <button onClick={onSubmit} disabled={!canSubmit || isSubmitting}>
+          {isSubmitting ? <LoadingLabel label="送信中..." /> : <><Send size={18} /> 送信</>}
         </button>
       </div>
       {local?.submittedMoveCount ? <span className="submitted">送信済み最短: {local.submittedMoveCount}手</span> : null}
@@ -412,6 +455,12 @@ function GameControls({
 
 function RoundResultView({ result, state, ws }: { result: RoundResult; state: PublicRoomState; ws: WebSocket | null }) {
   const winner = state.players.find((player) => player.id === result.winnerPlayerId);
+  const [isLoadingNext, setIsLoadingNext] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsLoadingNext(false);
+  }, [result.roundNumber]);
+
   return (
     <section className="panel result">
       <h2>第{result.roundNumber}ラウンド結果</h2>
@@ -427,8 +476,15 @@ function RoundResultView({ result, state, ws }: { result: RoundResult; state: Pu
         })}
       </div>
       {state.phase === "roundResult" ? (
-        <button onClick={() => sendJson(ws, { type: "nextRound" })}>
-          <StepForward size={18} /> 次のラウンド
+        <button
+          disabled={!isSocketOpen(ws) || isLoadingNext}
+          onClick={() => {
+            if (sendJson(ws, { type: "nextRound" })) {
+              setIsLoadingNext(true);
+            }
+          }}
+        >
+          {isLoadingNext ? <LoadingLabel label="準備中..." /> : <><StepForward size={18} /> 次のラウンド</>}
         </button>
       ) : null}
     </section>
@@ -455,17 +511,44 @@ function GameResultView({ state }: { state: PublicRoomState }) {
   );
 }
 
-function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoomState; playerId: string }) {
+function Room({
+  ws,
+  socketReady,
+  state,
+  playerId,
+  error
+}: {
+  ws: WebSocket | null;
+  socketReady: boolean;
+  state: PublicRoomState;
+  playerId: string;
+  error: string;
+}) {
   const round = state.currentRound;
   const [local, setLocal] = React.useState<LocalPlayState | null>(null);
   const [isStarting, setIsStarting] = React.useState(false);
+  const [isForcingRoundEnd, setIsForcingRoundEnd] = React.useState(false);
+  const [isSubmittingSolution, setIsSubmittingSolution] = React.useState(false);
   const now = useNow();
 
   React.useEffect(() => {
     if (state.phase !== "waiting" || round) {
       setIsStarting(false);
     }
-  }, [round, state.phase]);
+    if (state.phase !== "playing") {
+      setIsForcingRoundEnd(false);
+      setIsSubmittingSolution(false);
+    }
+    if (!socketReady) {
+      setIsStarting(false);
+      setIsForcingRoundEnd(false);
+      setIsSubmittingSolution(false);
+    }
+  }, [round, socketReady, state.phase]);
+
+  React.useEffect(() => {
+    if (error) setIsSubmittingSolution(false);
+  }, [error]);
 
   React.useEffect(() => {
     if (!round) {
@@ -551,14 +634,17 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
 
   function submit(): void {
     if (!local) return;
-    sendJson(ws, { type: "submitSolution", moves: local.moveHistory });
-    setLocal({ ...local, submittedMoveCount: local.moveHistory.length });
+    if (sendJson(ws, { type: "submitSolution", moves: local.moveHistory })) {
+      setIsSubmittingSolution(true);
+      setLocal({ ...local, submittedMoveCount: local.moveHistory.length });
+    }
   }
 
   function startGame(): void {
-    if (ws?.readyState !== WebSocket.OPEN) return;
-    setIsStarting(true);
-    sendJson(ws, { type: "startGame" });
+    if (!isSocketOpen(ws)) return;
+    if (sendJson(ws, { type: "startGame" })) {
+      setIsStarting(true);
+    }
   }
 
   function leaveToLobby(): void {
@@ -568,12 +654,19 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
 
   function forceEndRound(): void {
     if (!window.confirm("このラウンドを終了しますか？\n現在の最短提出が勝ちになります。")) return;
-    sendJson(ws, { type: "forceEndRound" });
+    if (sendJson(ws, { type: "forceEndRound" })) {
+      setIsForcingRoundEnd(true);
+    }
   }
 
   const currentPlayer = state.players.find((player) => player.id === playerId);
   const roomUrl = `${window.location.origin}/room/${state.roomId}`;
   const submitted = round?.submissionSummary.submittedPlayerIds.length ?? 0;
+  const hasSubmitted = Boolean(round?.submissionSummary.submittedPlayerIds.includes(playerId));
+
+  React.useEffect(() => {
+    if (hasSubmitted) setIsSubmittingSolution(false);
+  }, [hasSubmitted]);
 
   return (
     <main className={`app-shell phase-${state.phase}`}>
@@ -605,18 +698,18 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
             <span>{currentPlayer ? `あなた: ${displayPlayerName(currentPlayer.name)}` : "接続中"}</span>
             <span>送信済み: {submitted} / {state.players.length}</span>
             {state.phase === "waiting" ? (
-              <button onClick={startGame} disabled={isStarting}>
-                <Play size={18} /> 開始
+              <button onClick={startGame} disabled={isStarting || !socketReady || !isSocketOpen(ws)}>
+                {isStarting ? <LoadingLabel label="準備中..." /> : <><Play size={18} /> 開始</>}
               </button>
             ) : null}
             {isStarting ? (
               <div className="loading-status" role="status" aria-live="polite">
-                <Loader2 className="spin" size={16} /> ロード中...
+                <LoadingLabel label="ラウンドを準備中..." />
               </div>
             ) : null}
             {state.phase === "playing" ? (
-              <button className="secondary" onClick={forceEndRound}>
-                <Flag size={18} /> ラウンド終了
+              <button className="secondary" onClick={forceEndRound} disabled={isForcingRoundEnd || !socketReady || !isSocketOpen(ws)}>
+                {isForcingRoundEnd ? <LoadingLabel label="集計中..." /> : <><Flag size={18} /> ラウンド終了</>}
               </button>
             ) : null}
             <button className="secondary" onClick={leaveToLobby}>
@@ -629,7 +722,15 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
 
         <section className="play-area">
           <BoardView board={board} robots={robots} target={target} onMove={moveRobot} />
-          <GameControls state={state} local={local} goalReached={goalReached} onUndo={undo} onReset={reset} onSubmit={submit} />
+          <GameControls
+            state={state}
+            local={local}
+            goalReached={goalReached}
+            onUndo={undo}
+            onReset={reset}
+            onSubmit={submit}
+            isSubmitting={isSubmittingSolution}
+          />
         </section>
       </section>
     </main>
@@ -637,11 +738,15 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
 }
 
 function App() {
-  const { ws, state, playerId, error, notice } = useSocket();
+  const { ws, socketReady, state, playerId, error, notice } = useSocket();
 
   return (
     <>
-      {state ? <Room ws={ws} state={state} playerId={playerId} /> : <Lobby ws={ws} playerId={playerId} />}
+      {state ? (
+        <Room ws={ws} socketReady={socketReady} state={state} playerId={playerId} error={error} />
+      ) : (
+        <Lobby ws={ws} socketReady={socketReady} playerId={playerId} error={error} />
+      )}
       <div className="toast-stack">
         {notice ? <div className="toast">{notice}</div> : null}
         {error ? <div className="toast error">{error}</div> : null}

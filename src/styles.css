@@ -224,6 +224,10 @@ label {
   font-weight: 800;
 }
 
+.join-panel .loading-status {
+  justify-self: start;
+}
+
 .spin {
   animation: spin 0.9s linear infinite;
 }
@@ -596,10 +600,10 @@ label {
   .phase-roundResult .side,
   .phase-gameResult .side {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto minmax(200px, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
     min-height: 0;
-    max-height: none;
-    overflow: hidden;
+    max-height: 34dvh;
+    overflow: auto;
   }
 
   .phase-roundResult .play-area,
@@ -609,16 +613,26 @@ label {
 
   .phase-roundResult .result,
   .phase-gameResult .result {
-    min-height: 200px;
-    max-height: none;
+    min-height: 0;
+    max-height: 120px;
   }
 
   .phase-roundResult .board,
   .phase-gameResult .board {
-    width: min(calc(100vw - 12px), calc(100dvh - 540px));
-    height: min(calc(100vw - 12px), calc(100dvh - 540px));
-    min-width: 180px;
-    min-height: 180px;
+    width: min(calc(100vw - 12px), calc(100dvh - 300px));
+    height: min(calc(100vw - 12px), calc(100dvh - 300px));
+    min-width: min(240px, calc(100vw - 12px));
+    min-height: min(240px, calc(100vw - 12px));
+  }
+
+  .phase-roundResult .controls,
+  .phase-gameResult .controls {
+    grid-template-columns: 50px auto minmax(0, 1fr);
+  }
+
+  .phase-roundResult .controls .buttons,
+  .phase-gameResult .controls .buttons {
+    display: none;
   }
 
   .players,
