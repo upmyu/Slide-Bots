@@ -27,6 +27,19 @@ const totalRounds = 10;
 const roundTimeSeconds = 150;
 const maxPlayers = 10;
 
+const contentTypes: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon"
+};
+
 type ClientContext = {
   ws: WebSocket;
   roomId?: string;
@@ -338,10 +351,14 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  const urlPath = req.url === "/" || req.url.startsWith("/room/") ? "/index.html" : req.url;
+  const requestUrl = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
+  const urlPath = requestUrl.pathname === "/" || requestUrl.pathname.startsWith("/room/")
+    ? "/index.html"
+    : requestUrl.pathname;
   try {
     const filePath = path.join(root, "dist", urlPath);
     const body = await readFile(filePath);
+    res.setHeader("Content-Type", contentTypes[path.extname(filePath)] ?? "application/octet-stream");
     res.end(body);
   } catch {
     res.statusCode = 404;
@@ -356,6 +373,6 @@ wss.on("connection", (ws) => {
   ws.on("close", () => handleDisconnect(ws));
 });
 
-server.listen(port, () => {
+server.listen(port, "0.0.0.0", () => {
   console.log(`Slide Bots running at http://localhost:${port}`);
 });

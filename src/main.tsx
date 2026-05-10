@@ -43,6 +43,10 @@ function formatTime(ms: number): string {
 }
 
 function wsUrl(): string {
+  if (import.meta.env.PROD) {
+    return `wss://${window.location.host}/ws`;
+  }
+
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   return `${protocol}://${window.location.host}/ws`;
 }
