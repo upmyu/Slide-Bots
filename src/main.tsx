@@ -12,6 +12,8 @@ type LocalPlayState = {
   submittedMoveCount?: number;
 };
 
+type RobotRenderPositions = Record<RobotColor, { x: number; y: number }>;
+
 const colorLabel: Record<RobotColor, string> = {
   red: "R",
   blue: "B",
@@ -33,6 +35,19 @@ function useNow(intervalMs = 250): number {
     return () => window.clearInterval(id);
   }, [intervalMs]);
   return now;
+}
+
+function cloneRobotPositions(robots: RobotPositions): RobotRenderPositions {
+  return {
+    red: { ...robots.red },
+    blue: { ...robots.blue },
+    green: { ...robots.green },
+    yellow: { ...robots.yellow }
+  };
+}
+
+function robotPositionsKey(robots: RobotPositions): string {
+  return `${robots.red.x},${robots.red.y}|${robots.blue.x},${robots.blue.y}|${robots.green.x},${robots.green.y}|${robots.yellow.x},${robots.yellow.y}`;
 }
 
 function formatTime(ms: number): string {
@@ -102,6 +117,18 @@ function useSocket() {
     return () => socket.close();
   }, []);
 
+  React.useEffect(() => {
+    if (!notice) return;
+    const id = window.setTimeout(() => setNotice(""), 2600);
+    return () => window.clearTimeout(id);
+  }, [notice]);
+
+  React.useEffect(() => {
+    if (!error) return;
+    const id = window.setTimeout(() => setError(""), 5000);
+    return () => window.clearTimeout(id);
+  }, [error]);
+
   return { ws, state, setState, playerId, error, setError, notice, setNotice };
 }
 
@@ -117,16 +144,60 @@ function BoardView({
   board,
   robots,
   target,
-  onMove,
-  debug
+  onMove
 }: {
   board: Board;
   robots: RobotPositions;
   target: Target;
   onMove?: (robot: RobotColor, dx: number, dy: number) => void;
-  debug: boolean;
 }) {
   const pointerStart = React.useRef<{ x: number; y: number; robot: RobotColor } | null>(null);
+  const [displayRobots, setDisplayRobots] = React.useState<RobotRenderPositions>(() => cloneRobotPositions(robots));
+  const displayRobotsRef = React.useRef(displayRobots);
+  const robotsKey = robotPositionsKey(robots);
+
+  React.useEffect(() => {
+    displayRobotsRef.current = displayRobots;
+  }, [displayRobots]);
+
+  React.useEffect(() => {
+    const from = displayRobotsRef.current;
+    const to = cloneRobotPositions(robots);
+    const maxDistance = Math.max(
+      ...(["red", "blue", "green", "yellow"] as RobotColor[]).map((color) => Math.hypot(to[color].x - from[color].x, to[color].y - from[color].y))
+    );
+
+    if (maxDistance === 0) return;
+
+    const duration = Math.min(460, 170 + maxDistance * 28);
+    const startedAt = performance.now();
+    let frameId = 0;
+
+    function tick(now: number): void {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const next = (["red", "blue", "green", "yellow"] as RobotColor[]).reduce((positions, color) => {
+        positions[color] = {
+          x: from[color].x + (to[color].x - from[color].x) * eased,
+          y: from[color].y + (to[color].y - from[color].y) * eased
+        };
+        return positions;
+      }, {} as RobotRenderPositions);
+
+      displayRobotsRef.current = next;
+      setDisplayRobots(next);
+
+      if (progress < 1) {
+        frameId = window.requestAnimationFrame(tick);
+      } else {
+        displayRobotsRef.current = to;
+        setDisplayRobots(to);
+      }
+    }
+
+    frameId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [robotsKey]);
 
   function pointerCell(event: React.PointerEvent<SVGSVGElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -174,11 +245,6 @@ function BoardView({
       {cells.map((cell) => (
         <g key={`${cell.x}-${cell.y}`}>
           <rect x={cell.x} y={cell.y} width="1" height="1" className="cell" />
-          {debug ? (
-            <text x={cell.x + 0.5} y={cell.y + 0.55} className="coord">
-              {cell.x},{cell.y}
-            </text>
-          ) : null}
           {cell.wall & 1 ? <line x1={cell.x} y1={cell.y} x2={cell.x + 1} y2={cell.y} className="wall" /> : null}
           {cell.wall & 2 ? <line x1={cell.x + 1} y1={cell.y} x2={cell.x + 1} y2={cell.y + 1} className="wall" /> : null}
           {cell.wall & 4 ? <line x1={cell.x} y1={cell.y + 1} x2={cell.x + 1} y2={cell.y + 1} className="wall" /> : null}
@@ -199,7 +265,7 @@ function BoardView({
         </text>
       ))}
       <rect x={target.x + 0.08} y={target.y + 0.08} width="0.84" height="0.84" className="active-target" />
-      {Object.entries(robots).map(([color, cell]) => (
+      {Object.entries(displayRobots).map(([color, cell]) => (
         <g key={color} className="robot-hit">
           <circle cx={cell.x + 0.5} cy={cell.y + 0.5} r="0.44" className={`robot ${color}`} />
           <text x={cell.x + 0.5} y={cell.y + 0.64} className="robot-label">
@@ -292,11 +358,8 @@ function GameControls({
 
   return (
     <section className="panel controls">
-      <div>
-        <span className="eyebrow">目標</span>
-        <strong>
-          {round ? `${colorName[round.target.color]}のボットを${targetGlyph(round.target)}へ` : "待機中"}
-        </strong>
+      <div className="goal-cell" aria-label={round ? `目標: ${colorName[round.target.color]} ${targetGlyph(round.target)}` : "待機中"}>
+        {round ? <span className={`goal-marker ${round.target.color}`}>{targetGlyph(round.target)}</span> : <strong>待機中</strong>}
       </div>
       <div>
         <span className="eyebrow">手数</span>
@@ -365,7 +428,6 @@ function GameResultView({ state }: { state: PublicRoomState }) {
 
 function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoomState; playerId: string }) {
   const round = state.currentRound;
-  const [debug, setDebug] = React.useState(false);
   const [local, setLocal] = React.useState<LocalPlayState | null>(null);
   const now = useNow();
 
@@ -389,6 +451,32 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
     yellow: { x: 6, y: 0 }
   };
   const goalReached = round ? isGoalReached(board, robots, target) : false;
+
+  React.useEffect(() => {
+    const result = state.lastRoundResult;
+    const winningMoves = result?.winningSubmission?.moves;
+    if (!round || !winningMoves || !["roundResult", "gameResult"].includes(state.phase)) return;
+
+    let replayRobots = round.initialRobots;
+    const timers: number[] = [];
+    setLocal({ robots: replayRobots, moveHistory: [] });
+
+    winningMoves.forEach((move, index) => {
+      const timer = window.setTimeout(() => {
+        const nextRobots = applyMove(round.board, replayRobots, move);
+        if (nextRobots) replayRobots = nextRobots;
+        setLocal({
+          robots: replayRobots,
+          moveHistory: winningMoves.slice(0, index + 1)
+        });
+      }, 520 * (index + 1));
+      timers.push(timer);
+    });
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [round?.roundNumber, round?.deadline, state.phase, state.lastRoundResult?.winningSubmission?.submittedAt]);
 
   function moveRobot(robot: RobotColor, dx: number, dy: number): void {
     if (!round || state.phase !== "playing") return;
@@ -436,7 +524,7 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
   const submitted = round?.submissionSummary.submittedPlayerIds.length ?? 0;
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell phase-${state.phase}`}>
       <header className="topbar">
         <div>
           <span className="eyebrow">部屋</span>
@@ -461,10 +549,6 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
           <section className="panel room-actions">
             <span>{currentPlayer ? `あなた: ${displayPlayerName(currentPlayer.name)}` : "接続中"}</span>
             <span>送信済み: {submitted} / {state.players.length}</span>
-            <label className="debug-toggle">
-              <input type="checkbox" checked={debug} onChange={(event) => setDebug(event.target.checked)} />
-              座標
-            </label>
             {state.phase === "waiting" ? (
               <button onClick={() => sendJson(ws, { type: "startGame" })}>
                 <Play size={18} /> 開始
@@ -476,7 +560,7 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
         </aside>
 
         <section className="play-area">
-          <BoardView board={board} robots={robots} target={target} onMove={moveRobot} debug={debug} />
+          <BoardView board={board} robots={robots} target={target} onMove={moveRobot} />
           <GameControls state={state} local={local} goalReached={goalReached} onUndo={undo} onReset={reset} onSubmit={submit} />
         </section>
       </section>
