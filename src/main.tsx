@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { RotateCcw, Undo2, Copy, Play, Send, StepForward, Flag, LogOut, Loader2 } from "lucide-react";
 import { fixedBoard } from "./game/boards/fixedBoard";
 import { applyMove, detectSwipeDirection, isGoalReached, robotAt, sameCell } from "./game/rules";
-import { Board, ClientMessage, Move, PublicRoomState, RobotColor, RobotPositions, RoundResult, ServerMessage, Target } from "./game/types";
+import { Board, ClientMessage, Move, PublicRoomState, RobotColor, RobotPositions, RoundResult, ServerMessage, Target, TargetColor, robotColors } from "./game/types";
 import "./styles.css";
 
 type LocalPlayState = {
@@ -19,14 +19,16 @@ const colorLabel: Record<RobotColor, string> = {
   red: "R",
   blue: "B",
   green: "G",
-  yellow: "Y"
+  yellow: "Y",
+  black: "K"
 };
 
-const colorName: Record<RobotColor, string> = {
+const colorName: Record<TargetColor, string> = {
   red: "赤",
   blue: "青",
   green: "緑",
-  yellow: "黄"
+  yellow: "黄",
+  rainbow: "虹"
 };
 
 function useNow(intervalMs = 250): number {
@@ -39,16 +41,11 @@ function useNow(intervalMs = 250): number {
 }
 
 function cloneRobotPositions(robots: RobotPositions): RobotRenderPositions {
-  return {
-    red: { ...robots.red },
-    blue: { ...robots.blue },
-    green: { ...robots.green },
-    yellow: { ...robots.yellow }
-  };
+  return Object.fromEntries(robotColors.map((color) => [color, { ...robots[color] }])) as RobotRenderPositions;
 }
 
 function robotPositionsKey(robots: RobotPositions): string {
-  return `${robots.red.x},${robots.red.y}|${robots.blue.x},${robots.blue.y}|${robots.green.x},${robots.green.y}|${robots.yellow.x},${robots.yellow.y}`;
+  return robotColors.map((color) => `${robots[color].x},${robots[color].y}`).join("|");
 }
 
 function formatTime(ms: number): string {
@@ -213,7 +210,7 @@ function BoardView({
     const from = displayRobotsRef.current;
     const to = cloneRobotPositions(robots);
     const maxDistance = Math.max(
-      ...(["red", "blue", "green", "yellow"] as RobotColor[]).map((color) => Math.hypot(to[color].x - from[color].x, to[color].y - from[color].y))
+      ...robotColors.map((color) => Math.hypot(to[color].x - from[color].x, to[color].y - from[color].y))
     );
 
     if (maxDistance === 0) return;
@@ -225,7 +222,7 @@ function BoardView({
     function tick(now: number): void {
       const progress = Math.min(1, (now - startedAt) / duration);
       const eased = 1 - Math.pow(1 - progress, 3);
-      const next = (["red", "blue", "green", "yellow"] as RobotColor[]).reduce((positions, color) => {
+      const next = robotColors.reduce((positions, color) => {
         positions[color] = {
           x: from[color].x + (to[color].x - from[color].x) * eased,
           y: from[color].y + (to[color].y - from[color].y) * eased
@@ -567,7 +564,8 @@ function Room({
     red: { x: 0, y: 0 },
     blue: { x: 2, y: 0 },
     green: { x: 4, y: 0 },
-    yellow: { x: 6, y: 0 }
+    yellow: { x: 6, y: 0 },
+    black: { x: 8, y: 0 }
   };
   const goalReached = round ? isGoalReached(board, robots, target) : false;
 

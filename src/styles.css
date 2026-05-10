@@ -304,6 +304,10 @@ label {
   fill: #b98619;
 }
 
+.target.rainbow {
+  fill: #6b3fd9;
+}
+
 .active-target {
   fill: none;
   stroke: #1e2938;
@@ -332,6 +336,10 @@ label {
 
 .robot.yellow {
   fill: #f2bd35;
+}
+
+.robot.black {
+  fill: #161a20;
 }
 
 .robot-label {
@@ -387,6 +395,10 @@ label {
 
 .goal-marker.yellow {
   color: #b98619;
+}
+
+.goal-marker.rainbow {
+  color: #6b3fd9;
 }
 
 .controls strong {

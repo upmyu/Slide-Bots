@@ -1,4 +1,5 @@
-export type RobotColor = "red" | "blue" | "green" | "yellow";
+export type RobotColor = "red" | "blue" | "green" | "yellow" | "black";
+export type TargetColor = Exclude<RobotColor, "black"> | "rainbow";
 export type Direction = "N" | "E" | "S" | "W";
 export type WallMask = number;
 
@@ -12,7 +13,7 @@ export type TargetShape = "circle" | "triangle" | "square" | "cross" | "vortex";
 export type Target = {
   x: number;
   y: number;
-  color: RobotColor;
+  color: TargetColor;
   shape: TargetShape;
 };
 
@@ -135,5 +136,5 @@ export type SolverResult =
       solvable: false;
     };
 
-export const robotColors: RobotColor[] = ["red", "blue", "green", "yellow"];
+export const robotColors: RobotColor[] = ["red", "blue", "green", "yellow", "black"];
 export const directions: Direction[] = ["N", "E", "S", "W"];

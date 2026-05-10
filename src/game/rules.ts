@@ -63,12 +63,7 @@ export function slideRobot(
   robot: RobotColor,
   direction: Direction
 ): RobotPositions {
-  const next: RobotPositions = {
-    red: { ...robots.red },
-    blue: { ...robots.blue },
-    green: { ...robots.green },
-    yellow: { ...robots.yellow }
-  };
+  const next = Object.fromEntries(robotColors.map((color) => [color, { ...robots[color] }])) as RobotPositions;
   let pos = { ...next[robot] };
 
   while (canMoveOneStep(board, next, pos, direction, robot)) {
@@ -85,8 +80,11 @@ export function applyMove(board: Board, robots: RobotPositions, move: Move): Rob
   return sameCell(next[move.robot], robots[move.robot]) ? null : next;
 }
 
-export function isGoalReached(board: Board, robots: RobotPositions, targetIndexOrTarget: number | { x: number; y: number; color: RobotColor }): boolean {
+export function isGoalReached(board: Board, robots: RobotPositions, targetIndexOrTarget: number | Board["targets"][number]): boolean {
   const target = typeof targetIndexOrTarget === "number" ? board.targets[targetIndexOrTarget] : targetIndexOrTarget;
+  if (target.color === "rainbow") {
+    return robotColors.some((color) => sameCell(robots[color], target));
+  }
   return sameCell(robots[target.color], target);
 }
 
@@ -105,7 +103,7 @@ export function applyMoves(board: Board, initialRobots: RobotPositions, moves: M
 export function validateSubmission(
   board: Board,
   initialRobots: RobotPositions,
-  target: { x: number; y: number; color: RobotColor },
+  target: Board["targets"][number],
   moves: Move[]
 ): { valid: true; finalRobots: RobotPositions } | { valid: false; reason: string } {
   if (moves.length === 0) return { valid: false, reason: "手順が入力されていません。" };
@@ -135,5 +133,5 @@ export function detectSwipeDirection(dx: number, dy: number): Direction | null {
 }
 
 export function stateKey(robots: RobotPositions): string {
-  return `${robots.red.x},${robots.red.y}|${robots.blue.x},${robots.blue.y}|${robots.green.x},${robots.green.y}|${robots.yellow.x},${robots.yellow.y}`;
+  return robotColors.map((color) => `${robots[color].x},${robots[color].y}`).join("|");
 }
