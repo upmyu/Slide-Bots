@@ -106,7 +106,7 @@ function broadcast(room: ManagedRoom): void {
 
 function normalizeName(name: string): string {
   const trimmed = name.trim();
-  return trimmed || `Player ${randomId(2)}`;
+  return trimmed || `プレイヤー${randomId(2)}`;
 }
 
 function attachPlayer(room: ManagedRoom, ws: WebSocket, playerId: string, name: string): Player {
@@ -143,16 +143,16 @@ function createRoom(ws: WebSocket, name: string, requestedPlayerId?: string): vo
 function joinRoom(ws: WebSocket, roomId: string, name: string, requestedPlayerId?: string): void {
   const room = rooms.get(roomId.toUpperCase());
   if (!room) {
-    send(ws, { type: "error", message: "Room not found." });
+    send(ws, { type: "error", message: "部屋が見つかりません。" });
     return;
   }
   const returning = requestedPlayerId ? room.players.some((player) => player.id === requestedPlayerId) : false;
   if (room.phase !== "waiting" && !returning) {
-    send(ws, { type: "error", message: "Game already started." });
+    send(ws, { type: "error", message: "ゲームはすでに開始されています。" });
     return;
   }
   if (!returning && room.players.length >= maxPlayers) {
-    send(ws, { type: "error", message: "Room is full." });
+    send(ws, { type: "error", message: "部屋が満員です。" });
     return;
   }
 
@@ -249,11 +249,11 @@ function finishRound(room: ManagedRoom): void {
 function submitSolution(room: ManagedRoom, playerId: string, moves: Move[], ws: WebSocket): void {
   const round = room.currentRound;
   if (room.phase !== "playing" || !round) {
-    send(ws, { type: "submissionRejected", reason: "Round is not active." });
+    send(ws, { type: "submissionRejected", reason: "現在ラウンド中ではありません。" });
     return;
   }
   if (Date.now() > round.deadline) {
-    send(ws, { type: "submissionRejected", reason: "Deadline has passed." });
+    send(ws, { type: "submissionRejected", reason: "制限時間を過ぎています。" });
     return;
   }
   const validation = validateSubmission(round.board, round.initialRobots, round.target, moves);
@@ -270,7 +270,7 @@ function submitSolution(room: ManagedRoom, playerId: string, moves: Move[], ws: 
     existing.moves = moves;
     existing.submittedAt = submittedAt;
   } else if (moves.length > existing.moves.length) {
-    send(ws, { type: "submissionRejected", reason: "A shorter submission is already recorded." });
+    send(ws, { type: "submissionRejected", reason: "すでにより短い手順が記録されています。" });
     return;
   }
 
@@ -283,7 +283,7 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
   try {
     message = JSON.parse(raw) as ClientMessage;
   } catch {
-    send(ws, { type: "error", message: "Invalid JSON." });
+    send(ws, { type: "error", message: "通信データの形式が正しくありません。" });
     return;
   }
 
@@ -299,7 +299,7 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
     return;
   }
   if (!room || !context?.playerId) {
-    send(ws, { type: "error", message: "Join a room first." });
+    send(ws, { type: "error", message: "先に部屋へ参加してください。" });
     return;
   }
   if (message.type === "startGame") startGame(room);
@@ -362,7 +362,7 @@ const server = createServer(async (req, res) => {
     res.end(body);
   } catch {
     res.statusCode = 404;
-    res.end("Not found");
+    res.end("見つかりません");
   }
 });
 

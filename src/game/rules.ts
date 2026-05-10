@@ -108,13 +108,13 @@ export function validateSubmission(
   target: { x: number; y: number; color: RobotColor },
   moves: Move[]
 ): { valid: true; finalRobots: RobotPositions } | { valid: false; reason: string } {
-  if (moves.length === 0) return { valid: false, reason: "No moves submitted." };
-  if (moves.length > 80) return { valid: false, reason: "Too many moves." };
+  if (moves.length === 0) return { valid: false, reason: "手順が入力されていません。" };
+  if (moves.length > 80) return { valid: false, reason: "手数が多すぎます。" };
 
   const finalRobots = applyMoves(board, initialRobots, moves);
-  if (!finalRobots) return { valid: false, reason: "Submission contains an illegal move." };
+  if (!finalRobots) return { valid: false, reason: "移動できない手順が含まれています。" };
   if (!isGoalReached(board, finalRobots, target)) {
-    return { valid: false, reason: "Target robot is not on the target." };
+    return { valid: false, reason: "対象のボットが目標に到達していません。" };
   }
 
   return { valid: true, finalRobots };

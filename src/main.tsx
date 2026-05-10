@@ -20,10 +20,10 @@ const colorLabel: Record<RobotColor, string> = {
 };
 
 const colorName: Record<RobotColor, string> = {
-  red: "Red",
-  blue: "Blue",
-  green: "Green",
-  yellow: "Yellow"
+  red: "赤",
+  blue: "青",
+  green: "緑",
+  yellow: "黄"
 };
 
 function useNow(intervalMs = 250): number {
@@ -55,6 +55,10 @@ function sendJson(ws: WebSocket | null, message: ClientMessage): void {
   if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
 }
 
+function displayPlayerName(name: string): string {
+  return name.replace(/^Player ([A-Z0-9]{2})$/, "プレイヤー$1");
+}
+
 function useSocket() {
   const [ws, setWs] = React.useState<WebSocket | null>(null);
   const [state, setState] = React.useState<PublicRoomState | null>(null);
@@ -77,24 +81,24 @@ function useSocket() {
       }
       if (message.type === "roomState") setState(message.state);
       if (message.type === "submissionAccepted") {
-        setNotice(`Submitted ${message.moveCount} moves.`);
+        setNotice(`${message.moveCount}手で送信しました。`);
         setError("");
       }
       if (message.type === "submissionRejected") {
         setError(message.reason);
       }
       if (message.type === "roundResult") {
-        setNotice("Round finished.");
+        setNotice("ラウンド終了。");
       }
       if (message.type === "gameResult") {
-        setNotice("Game finished.");
+        setNotice("ゲーム終了。");
       }
       if (message.type === "error") {
         setError(message.message);
       }
     });
 
-    socket.addEventListener("close", () => setNotice("WebSocket disconnected. Refresh to reconnect."));
+    socket.addEventListener("close", () => setNotice("接続が切れました。再接続するには更新してください。"));
     return () => socket.close();
   }, []);
 
@@ -105,8 +109,8 @@ function targetGlyph(target: Target): string {
   if (target.shape === "circle") return "●";
   if (target.shape === "triangle") return "▲";
   if (target.shape === "square") return "■";
-  if (target.shape === "cross") return "✚";
-  return "◆";
+  if (target.shape === "cross") return "×";
+  return "◎";
 }
 
 function BoardView({
@@ -159,7 +163,7 @@ function BoardView({
       className="board"
       viewBox={`0 0 ${board.width} ${board.height}`}
       role="img"
-      aria-label="16 by 16 slide bots board"
+      aria-label="16かける16のスライドボット盤面"
       onPointerDown={pointerDown}
       onPointerUp={pointerUp}
       onPointerCancel={() => {
@@ -219,11 +223,11 @@ function Lobby({ ws, playerId }: { ws: WebSocket | null; playerId: string }) {
     <section className="join-panel">
       <div>
         <h1>Slide Bots</h1>
-        <p>Private simultaneous slide puzzle rooms for 1 to 10 players.</p>
+        <p>1から10人で同時に遊べるスライドパズルです。</p>
       </div>
       <label>
-        Name
-        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" />
+        名前
+        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="あなたの名前" />
       </label>
       <div className="join-actions">
         <button
@@ -232,10 +236,10 @@ function Lobby({ ws, playerId }: { ws: WebSocket | null; playerId: string }) {
             sendJson(ws, { type: "createRoom", name, playerId });
           }}
         >
-          <Play size={18} /> Create Room
+          <Play size={18} /> 部屋を作る
         </button>
         <label>
-          Room Code
+          部屋コード
           <input value={roomId} onChange={(event) => setRoomId(event.target.value.toUpperCase())} placeholder="ABCD" />
         </label>
         <button
@@ -245,7 +249,7 @@ function Lobby({ ws, playerId }: { ws: WebSocket | null; playerId: string }) {
             sendJson(ws, { type: "joinRoom", roomId, name, playerId });
           }}
         >
-          Join
+          参加
         </button>
       </div>
     </section>
@@ -258,7 +262,7 @@ function PlayerList({ state }: { state: PublicRoomState }) {
       {state.players.map((player) => (
         <div className="player" key={player.id}>
           <span className={player.connected ? "dot online" : "dot"} />
-          <span>{player.name}</span>
+          <span>{displayPlayerName(player.name)}</span>
           <strong>{player.score}</strong>
         </div>
       ))}
@@ -289,27 +293,27 @@ function GameControls({
   return (
     <section className="panel controls">
       <div>
-        <span className="eyebrow">Target</span>
+        <span className="eyebrow">目標</span>
         <strong>
-          {round ? `${colorName[round.target.color]} bot to ${targetGlyph(round.target)}` : "Waiting"}
+          {round ? `${colorName[round.target.color]}のボットを${targetGlyph(round.target)}へ` : "待機中"}
         </strong>
       </div>
       <div>
-        <span className="eyebrow">Moves</span>
+        <span className="eyebrow">手数</span>
         <strong>{local?.moveHistory.length ?? 0}</strong>
       </div>
       <div className="buttons">
-        <button className="secondary icon" onClick={onUndo} disabled={!local?.moveHistory.length} title="Undo">
+        <button className="secondary icon" onClick={onUndo} disabled={!local?.moveHistory.length} title="1手戻す">
           <Undo2 size={18} />
         </button>
-        <button className="secondary icon" onClick={onReset} disabled={!round} title="Reset">
+        <button className="secondary icon" onClick={onReset} disabled={!round} title="リセット">
           <RotateCcw size={18} />
         </button>
         <button onClick={onSubmit} disabled={!canSubmit}>
-          <Send size={18} /> Submit
+          <Send size={18} /> 送信
         </button>
       </div>
-      {local?.submittedMoveCount ? <span className="submitted">Best submitted: {local.submittedMoveCount}</span> : null}
+      {local?.submittedMoveCount ? <span className="submitted">送信済み最短: {local.submittedMoveCount}手</span> : null}
     </section>
   );
 }
@@ -318,21 +322,21 @@ function RoundResultView({ result, state, ws }: { result: RoundResult; state: Pu
   const winner = state.players.find((player) => player.id === result.winnerPlayerId);
   return (
     <section className="panel result">
-      <h2>Round {result.roundNumber} Result</h2>
-      <p>{winner ? `${winner.name} wins with ${result.winningSubmission?.moveCount} moves.` : "No valid submissions this round."}</p>
+      <h2>第{result.roundNumber}ラウンド結果</h2>
+      <p>{winner ? `${displayPlayerName(winner.name)}さんが${result.winningSubmission?.moveCount}手で勝利しました。` : "このラウンドの有効な回答はありませんでした。"}</p>
       <div className="submission-list">
         {result.validSubmissions.map((submission) => {
           const player = state.players.find((candidate) => candidate.id === submission.playerId);
           return (
             <span key={`${submission.playerId}-${submission.submittedAt}`}>
-              {player?.name ?? "Player"}: {submission.moveCount}
+              {player ? displayPlayerName(player.name) : "プレイヤー"}: {submission.moveCount}手
             </span>
           );
         })}
       </div>
       {state.phase === "roundResult" ? (
         <button onClick={() => sendJson(ws, { type: "nextRound" })}>
-          <StepForward size={18} /> Next Round
+          <StepForward size={18} /> 次のラウンド
         </button>
       ) : null}
     </section>
@@ -343,15 +347,15 @@ function GameResultView({ state }: { state: PublicRoomState }) {
   if (!state.gameResult) return null;
   return (
     <section className="panel result">
-      <h2>Final Result</h2>
-      <p>Winner: {state.gameResult.winners.map((winner) => winner.name).join(", ")}</p>
+      <h2>最終結果</h2>
+      <p>優勝: {state.gameResult.winners.map((winner) => displayPlayerName(winner.name)).join(", ")}</p>
       <div className="submission-list">
         {state.gameResult.players
           .slice()
           .sort((a, b) => b.score - a.score)
           .map((player) => (
             <span key={player.id}>
-              {player.name}: {player.score}
+              {displayPlayerName(player.name)}: {player.score}点
             </span>
           ))}
       </div>
@@ -435,18 +439,18 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <span className="eyebrow">Room</span>
+          <span className="eyebrow">部屋</span>
           <strong>{state.roomId}</strong>
         </div>
-        <button className="secondary icon" title="Copy room URL" onClick={() => navigator.clipboard.writeText(roomUrl)}>
+        <button className="secondary icon" title="部屋URLをコピー" onClick={() => navigator.clipboard.writeText(roomUrl)}>
           <Copy size={18} />
         </button>
         <div>
-          <span className="eyebrow">Round</span>
+          <span className="eyebrow">ラウンド</span>
           <strong>{round ? `${round.roundNumber} / ${state.totalRounds}` : `0 / ${state.totalRounds}`}</strong>
         </div>
         <div>
-          <span className="eyebrow">Time</span>
+          <span className="eyebrow">残り時間</span>
           <strong>{round ? formatTime(round.deadline - now) : "--:--"}</strong>
         </div>
       </header>
@@ -455,15 +459,15 @@ function Room({ ws, state, playerId }: { ws: WebSocket | null; state: PublicRoom
         <aside className="side">
           <PlayerList state={state} />
           <section className="panel room-actions">
-            <span>{currentPlayer ? `You are ${currentPlayer.name}` : "Connected"}</span>
-            <span>Submitted: {submitted} / {state.players.length}</span>
+            <span>{currentPlayer ? `あなた: ${displayPlayerName(currentPlayer.name)}` : "接続中"}</span>
+            <span>送信済み: {submitted} / {state.players.length}</span>
             <label className="debug-toggle">
               <input type="checkbox" checked={debug} onChange={(event) => setDebug(event.target.checked)} />
-              Coordinates
+              座標
             </label>
             {state.phase === "waiting" ? (
               <button onClick={() => sendJson(ws, { type: "startGame" })}>
-                <Play size={18} /> Start
+                <Play size={18} /> 開始
               </button>
             ) : null}
           </section>
