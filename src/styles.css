@@ -287,7 +287,8 @@ label {
 
 .robot-piece {
   pointer-events: none;
-  filter: drop-shadow(0 0.05px 0.08px rgba(0, 0, 0, 0.42));
+  filter: drop-shadow(0 0 0.035px rgba(255, 255, 255, 0.95)) drop-shadow(0 0 0.07px rgba(15, 21, 29, 0.86))
+    drop-shadow(0 0.08px 0.12px rgba(0, 0, 0, 0.58));
 }
 
 .active-target {
