@@ -341,19 +341,26 @@ label {
 }
 
 .goal-cell {
-  min-width: 56px;
+  min-width: 64px;
   justify-items: center;
 }
 
-.goal-marker {
+.goal-marker-frame {
+  position: relative;
   display: block;
-  width: 48px;
-  height: 48px;
+  width: 58px;
+  height: 58px;
+  overflow: hidden;
   border: 1px solid #c8d3dd;
   border-radius: 8px;
   background: #fff;
+}
+
+.goal-marker {
+  position: absolute;
+  display: block;
   object-fit: contain;
-  padding: 3px;
+  pointer-events: none;
 }
 
 .controls strong {
@@ -500,13 +507,12 @@ label {
   }
 
   .goal-cell {
-    min-width: 50px;
+    min-width: 56px;
   }
 
-  .goal-marker {
-    width: 44px;
-    height: 44px;
-    font-size: 1.3rem;
+  .goal-marker-frame {
+    width: 52px;
+    height: 52px;
   }
 }
 

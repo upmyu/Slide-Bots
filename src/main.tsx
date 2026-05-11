@@ -197,6 +197,60 @@ function targetLabel(target: Target): string {
   return `${colorName[target.color]} ${targetGlyph(target)}`;
 }
 
+type TargetImageMetrics = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+const targetImageMetrics: Record<string, TargetImageMetrics> = {
+  "rainbow-vortex": { left: 47, top: 42, width: 418, height: 428 },
+  "blue-circle": { left: 94, top: 130, width: 325, height: 340 },
+  "blue-square": { left: 74, top: 42, width: 365, height: 428 },
+  "blue-cross": { left: 47, top: 42, width: 418, height: 428 },
+  "blue-triangle": { left: 42, top: 64, width: 428, height: 385 },
+  "green-circle": { left: 58, top: 42, width: 396, height: 428 },
+  "green-square": { left: 56, top: 42, width: 401, height: 428 },
+  "green-cross": { left: 52, top: 42, width: 409, height: 428 },
+  "green-triangle": { left: 42, top: 72, width: 428, height: 369 },
+  "red-circle": { left: 44, top: 42, width: 424, height: 428 },
+  "red-square": { left: 45, top: 42, width: 422, height: 428 },
+  "red-cross": { left: 50, top: 42, width: 413, height: 428 },
+  "red-triangle": { left: 42, top: 66, width: 428, height: 379 },
+  "yellow-circle": { left: 54, top: 42, width: 405, height: 428 },
+  "yellow-square": { left: 44, top: 42, width: 425, height: 428 },
+  "yellow-cross": { left: 48, top: 42, width: 417, height: 428 },
+  "yellow-triangle": { left: 42, top: 70, width: 428, height: 373 }
+};
+
+const targetImageSourceSize = 512;
+
+function targetMetricsKey(target: Target): string {
+  if (target.color === "rainbow" || target.shape === "vortex") return "rainbow-vortex";
+  return `${target.color}-${target.shape}`;
+}
+
+function targetImageBox(target: Target, visibleSize: number) {
+  const metrics = targetImageMetrics[targetMetricsKey(target)];
+  const imageSize = (visibleSize * targetImageSourceSize) / Math.max(metrics.width, metrics.height);
+  return {
+    x: 0.5 - ((metrics.left + metrics.width / 2) / targetImageSourceSize) * imageSize,
+    y: 0.5 - ((metrics.top + metrics.height / 2) / targetImageSourceSize) * imageSize,
+    size: imageSize
+  };
+}
+
+function targetMarkerStyle(target: Target): React.CSSProperties {
+  const box = targetImageBox(target, 0.88);
+  return {
+    left: `${box.x * 100}%`,
+    top: `${box.y * 100}%`,
+    width: `${box.size * 100}%`,
+    height: `${box.size * 100}%`
+  };
+}
+
 function BoardView({
   board,
   robots,
@@ -311,19 +365,22 @@ function BoardView({
       {board.blocked.map((cell) => (
         <rect key={`blocked-${cell.x}-${cell.y}`} x={cell.x + 0.05} y={cell.y + 0.05} width="0.9" height="0.9" className="blocked" />
       ))}
-      {board.targets.map((item) => (
-        <image
-          key={`target-${item.x}-${item.y}-${item.color}-${item.shape}`}
-          href={targetImageFor(item)}
-          x={item.x + 0.09}
-          y={item.y + 0.09}
-          width="0.82"
-          height="0.82"
-          className="target-image"
-          aria-label={targetLabel(item)}
-          preserveAspectRatio="xMidYMid meet"
-        />
-      ))}
+      {board.targets.map((item) => {
+        const box = targetImageBox(item, 0.86);
+        return (
+          <image
+            key={`target-${item.x}-${item.y}-${item.color}-${item.shape}`}
+            href={targetImageFor(item)}
+            x={item.x + box.x}
+            y={item.y + box.y}
+            width={box.size}
+            height={box.size}
+            className="target-image"
+            aria-label={targetLabel(item)}
+            preserveAspectRatio="xMidYMid meet"
+          />
+        );
+      })}
       <rect x={target.x + 0.08} y={target.y + 0.08} width="0.84" height="0.84" className="active-target" />
       {Object.entries(displayRobots).map(([color, cell]) => (
         <g key={color} className="robot-hit">
@@ -442,7 +499,13 @@ function GameControls({
   return (
     <section className="panel controls">
       <div className="goal-cell" aria-label={round ? `目標: ${targetLabel(round.target)}` : "待機中"}>
-        {round ? <img className="goal-marker" src={targetImageFor(round.target)} alt="" /> : <strong>待機中</strong>}
+        {round ? (
+          <span className="goal-marker-frame">
+            <img className="goal-marker" src={targetImageFor(round.target)} alt="" style={targetMarkerStyle(round.target)} />
+          </span>
+        ) : (
+          <strong>待機中</strong>
+        )}
       </div>
       <div>
         <span className="eyebrow">手数</span>
