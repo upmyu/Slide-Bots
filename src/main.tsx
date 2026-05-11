@@ -315,10 +315,10 @@ function BoardView({
         <image
           key={`target-${item.x}-${item.y}-${item.color}-${item.shape}`}
           href={targetImageFor(item)}
-          x={item.x + 0.14}
-          y={item.y + 0.14}
-          width="0.72"
-          height="0.72"
+          x={item.x + 0.09}
+          y={item.y + 0.09}
+          width="0.82"
+          height="0.82"
           className="target-image"
           aria-label={targetLabel(item)}
           preserveAspectRatio="xMidYMid meet"
