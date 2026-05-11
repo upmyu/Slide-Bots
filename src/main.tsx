@@ -255,11 +255,13 @@ function BoardView({
   board,
   robots,
   target,
+  showActiveTarget,
   onMove
 }: {
   board: Board;
   robots: RobotPositions;
   target: Target;
+  showActiveTarget: boolean;
   onMove?: (robot: RobotColor, dx: number, dy: number) => void;
 }) {
   const pointerStart = React.useRef<{ x: number; y: number; robot: RobotColor } | null>(null);
@@ -367,6 +369,7 @@ function BoardView({
       ))}
       {board.targets.map((item) => {
         const box = targetImageBox(item, 0.86);
+        const isActiveTarget = showActiveTarget && sameCell(item, target) && item.color === target.color && item.shape === target.shape;
         return (
           <image
             key={`target-${item.x}-${item.y}-${item.color}-${item.shape}`}
@@ -375,13 +378,12 @@ function BoardView({
             y={item.y + box.y}
             width={box.size}
             height={box.size}
-            className="target-image"
+            className={isActiveTarget ? "target-image active-target" : "target-image"}
             aria-label={targetLabel(item)}
             preserveAspectRatio="xMidYMid meet"
           />
         );
       })}
-      <rect x={target.x + 0.08} y={target.y + 0.08} width="0.84" height="0.84" className="active-target" />
       {Object.entries(displayRobots).map(([color, cell]) => (
         <g key={color} className="robot-hit">
           <circle cx={cell.x + 0.5} cy={cell.y + 0.5} r="0.44" className={`robot ${color}`} />
@@ -813,7 +815,7 @@ function Room({
         </aside>
 
         <section className="play-area">
-          <BoardView board={board} robots={robots} target={target} onMove={moveRobot} />
+          <BoardView board={board} robots={robots} target={target} showActiveTarget={Boolean(round)} onMove={moveRobot} />
           <GameControls
             state={state}
             local={local}
