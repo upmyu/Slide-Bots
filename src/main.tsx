@@ -15,6 +15,10 @@ type LocalPlayState = {
 
 type RobotRenderPositions = Record<RobotColor, { x: number; y: number }>;
 type LobbyPendingAction = "create" | "join" | null;
+type AcceptedSubmission = {
+  moveCount: number;
+  receivedAt: number;
+};
 
 const colorLabel: Record<RobotColor, string> = {
   red: "R",
@@ -103,6 +107,7 @@ function useSocket() {
   const [playerId, setPlayerId] = React.useState(localStorage.getItem("slideBots.playerId") ?? "");
   const [error, setError] = React.useState("");
   const [notice, setNotice] = React.useState("");
+  const [acceptedSubmission, setAcceptedSubmission] = React.useState<AcceptedSubmission | null>(null);
 
   React.useEffect(() => {
     const socket = new WebSocket(wsUrl());
@@ -135,6 +140,7 @@ function useSocket() {
       if (message.type === "roomState") setState(message.state);
       if (message.type === "submissionAccepted") {
         setNotice(`${message.moveCount}手で送信しました。`);
+        setAcceptedSubmission({ moveCount: message.moveCount, receivedAt: Date.now() });
         setError("");
       }
       if (message.type === "submissionRejected") {
@@ -176,7 +182,7 @@ function useSocket() {
     return () => window.clearTimeout(id);
   }, [error]);
 
-  return { ws, socketReady, state, setState, playerId, error, setError, notice, setNotice };
+  return { ws, socketReady, state, setState, playerId, error, setError, notice, setNotice, acceptedSubmission };
 }
 
 function targetGlyph(target: Target): string {
@@ -521,19 +527,22 @@ function Room({
   socketReady,
   state,
   playerId,
-  error
+  error,
+  acceptedSubmission
 }: {
   ws: WebSocket | null;
   socketReady: boolean;
   state: PublicRoomState;
   playerId: string;
   error: string;
+  acceptedSubmission: AcceptedSubmission | null;
 }) {
   const round = state.currentRound;
   const [local, setLocal] = React.useState<LocalPlayState | null>(null);
   const [isStarting, setIsStarting] = React.useState(false);
   const [isForcingRoundEnd, setIsForcingRoundEnd] = React.useState(false);
   const [isSubmittingSolution, setIsSubmittingSolution] = React.useState(false);
+  const submitInFlightRef = React.useRef(false);
   const now = useNow();
 
   React.useEffect(() => {
@@ -543,17 +552,34 @@ function Room({
     if (state.phase !== "playing") {
       setIsForcingRoundEnd(false);
       setIsSubmittingSolution(false);
+      submitInFlightRef.current = false;
     }
     if (!socketReady) {
       setIsStarting(false);
       setIsForcingRoundEnd(false);
       setIsSubmittingSolution(false);
+      submitInFlightRef.current = false;
     }
   }, [round, socketReady, state.phase]);
 
   React.useEffect(() => {
-    if (error) setIsSubmittingSolution(false);
+    if (!error) return;
+    setIsSubmittingSolution(false);
+    submitInFlightRef.current = false;
   }, [error]);
+
+  React.useEffect(() => {
+    if (!acceptedSubmission) return;
+    setIsSubmittingSolution(false);
+    submitInFlightRef.current = false;
+    setLocal((current) => {
+      if (!current) return current;
+      const submittedMoveCount = current.submittedMoveCount
+        ? Math.min(current.submittedMoveCount, acceptedSubmission.moveCount)
+        : acceptedSubmission.moveCount;
+      return { ...current, submittedMoveCount };
+    });
+  }, [acceptedSubmission?.receivedAt]);
 
   React.useEffect(() => {
     if (!round) {
@@ -639,10 +665,10 @@ function Room({
   }
 
   function submit(): void {
-    if (!local) return;
+    if (!local || isSubmittingSolution || submitInFlightRef.current) return;
     if (sendJson(ws, { type: "submitSolution", moves: local.moveHistory })) {
+      submitInFlightRef.current = true;
       setIsSubmittingSolution(true);
-      setLocal({ ...local, submittedMoveCount: local.moveHistory.length });
     }
   }
 
@@ -671,7 +697,9 @@ function Room({
   const hasSubmitted = Boolean(round?.submissionSummary.submittedPlayerIds.includes(playerId));
 
   React.useEffect(() => {
-    if (hasSubmitted) setIsSubmittingSolution(false);
+    if (!hasSubmitted) return;
+    setIsSubmittingSolution(false);
+    submitInFlightRef.current = false;
   }, [hasSubmitted]);
 
   return (
@@ -708,11 +736,6 @@ function Room({
                 {isStarting ? <LoadingLabel label="準備中..." /> : <><Play size={18} /> 開始</>}
               </button>
             ) : null}
-            {isStarting ? (
-              <div className="loading-status" role="status" aria-live="polite">
-                <LoadingLabel label="ラウンドを準備中..." />
-              </div>
-            ) : null}
             {state.phase === "playing" ? (
               <button className="secondary" onClick={forceEndRound} disabled={isForcingRoundEnd || !socketReady || !isSocketOpen(ws)}>
                 {isForcingRoundEnd ? <LoadingLabel label="集計中..." /> : <><Flag size={18} /> ラウンド終了</>}
@@ -744,12 +767,12 @@ function Room({
 }
 
 function App() {
-  const { ws, socketReady, state, playerId, error, notice } = useSocket();
+  const { ws, socketReady, state, playerId, error, notice, acceptedSubmission } = useSocket();
 
   return (
     <>
       {state ? (
-        <Room ws={ws} socketReady={socketReady} state={state} playerId={playerId} error={error} />
+        <Room ws={ws} socketReady={socketReady} state={state} playerId={playerId} error={error} acceptedSubmission={acceptedSubmission} />
       ) : (
         <Lobby ws={ws} socketReady={socketReady} playerId={playerId} error={error} />
       )}

@@ -52,9 +52,25 @@ type ManagedRoom = RoomState & {
   lastRoundResult?: RoundResult;
   gameResult?: GameResult;
 };
+type RoundSetup = ReturnType<typeof generateRoundSetup>;
 
 const rooms = new Map<string, ManagedRoom>();
 const clients = new WeakMap<WebSocket, ClientContext>();
+const warmRoundSetups: RoundSetup[] = [];
+let isWarmingRoundSetup = false;
+
+function warmRoundSetup(): void {
+  if (isWarmingRoundSetup || warmRoundSetups.length >= 2) return;
+  isWarmingRoundSetup = true;
+  setTimeout(() => {
+    try {
+      warmRoundSetups.push(generateRoundSetup());
+    } finally {
+      isWarmingRoundSetup = false;
+      if (warmRoundSetups.length < 2) warmRoundSetup();
+    }
+  }, 500);
+}
 
 function randomId(length: number): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -163,7 +179,7 @@ function joinRoom(ws: WebSocket, roomId: string, name: string, requestedPlayerId
 }
 
 function startRound(room: ManagedRoom, roundNumber: number): void {
-  const setup = generateRoundSetup();
+  const setup = warmRoundSetups.shift() ?? generateRoundSetup();
   const startedAt = Date.now();
   room.phase = "playing";
   room.lastRoundResult = undefined;
@@ -179,6 +195,7 @@ function startRound(room: ManagedRoom, roundNumber: number): void {
   if (room.roundTimer) clearTimeout(room.roundTimer);
   room.roundTimer = setTimeout(() => finishRound(room), room.roundTimeSeconds * 1000 + 250);
   broadcast(room);
+  warmRoundSetup();
 }
 
 function startGame(room: ManagedRoom): void {
@@ -273,8 +290,8 @@ function submitSolution(room: ManagedRoom, playerId: string, moves: Move[], ws: 
   } else if (moves.length < existing.moves.length) {
     existing.moves = moves;
     existing.submittedAt = submittedAt;
-  } else if (moves.length > existing.moves.length) {
-    send(ws, { type: "submissionRejected", reason: "すでにより短い手順が記録されています。" });
+  } else {
+    send(ws, { type: "submissionRejected", reason: "すでに同じかより短い手順が記録されています。" });
     return;
   }
 

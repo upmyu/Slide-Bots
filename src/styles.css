@@ -256,7 +256,7 @@ label {
   aspect-ratio: 1;
   touch-action: none;
   border: 1px solid #596878;
-  border-radius: 8px;
+  border-radius: 0;
   background: #f8f6ef;
   box-shadow: 0 16px 35px rgba(40, 53, 67, 0.16);
 }
