@@ -13,6 +13,8 @@ const pieceImages: Record<RobotColor, string> = {
   black: blackPiece
 };
 
+export const allPieceImages = Object.values(pieceImages);
+
 export function pieceImageFor(color: RobotColor): string {
   return pieceImages[color];
 }

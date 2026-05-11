@@ -2,9 +2,9 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { RotateCcw, Undo2, Copy, Play, Send, StepForward, Flag, LogOut, Loader2 } from "lucide-react";
 import { fixedBoard } from "./game/boards/fixedBoard";
-import { pieceImageFor } from "./game/pieceAssets";
+import { allPieceImages, pieceImageFor } from "./game/pieceAssets";
 import { applyMove, detectSwipeDirection, isGoalReached, robotAt, sameCell } from "./game/rules";
-import { targetImageFor } from "./game/targetAssets";
+import { allTargetImages, targetImageFor } from "./game/targetAssets";
 import { Board, ClientMessage, Move, PublicRoomState, RobotColor, RobotPositions, RoundResult, ServerMessage, Target, TargetColor, robotColors } from "./game/types";
 import "./styles.css";
 
@@ -21,6 +21,10 @@ type AcceptedSubmission = {
   receivedAt: number;
 };
 
+type AssetLoadState = "loading" | "ready" | "fallback";
+
+const gameImageUrls = Array.from(new Set([...allPieceImages, ...allTargetImages]));
+
 const colorName: Record<TargetColor, string> = {
   red: "赤",
   blue: "青",
@@ -36,6 +40,37 @@ function useNow(intervalMs = 250): number {
     return () => window.clearInterval(id);
   }, [intervalMs]);
   return now;
+}
+
+function useGameImageAssets(): AssetLoadState {
+  const [assetState, setAssetState] = React.useState<AssetLoadState>("loading");
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    Promise.all(
+      gameImageUrls.map(
+        (url) =>
+          new Promise<boolean>((resolve) => {
+            const image = new Image();
+            image.decoding = "async";
+            image.onload = () => resolve(true);
+            image.onerror = () => resolve(false);
+            image.src = url;
+            if (image.complete) resolve(image.naturalWidth > 0);
+          })
+      )
+    ).then((results) => {
+      if (cancelled) return;
+      setAssetState(results.every(Boolean) ? "ready" : "fallback");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return assetState;
 }
 
 function cloneRobotPositions(robots: RobotPositions): RobotRenderPositions {
@@ -244,18 +279,70 @@ function targetMarkerStyle(target: Target): React.CSSProperties {
   };
 }
 
+const fallbackColor: Record<TargetColor | RobotColor, string> = {
+  red: "#d9423d",
+  blue: "#246db7",
+  green: "#2f9460",
+  yellow: "#f0b82f",
+  black: "#171c24",
+  rainbow: "#7b55d9"
+};
+
+function FallbackTargetShape({ target, className = "" }: { target: Target; className?: string }) {
+  const color = fallbackColor[target.color];
+  if (target.shape === "triangle") return <polygon className={className} points="0.5,0.13 0.88,0.83 0.12,0.83" fill={color} />;
+  if (target.shape === "square") return <rect className={className} x="0.18" y="0.18" width="0.64" height="0.64" fill={color} />;
+  if (target.shape === "cross") {
+    return (
+      <path
+        className={className}
+        d="M0.42 0.13h0.16v0.29h0.29v0.16h-0.29v0.29h-0.16v-0.29h-0.29v-0.16h0.29z"
+        fill={color}
+      />
+    );
+  }
+  if (target.shape === "vortex" || target.color === "rainbow") {
+    return (
+      <g className={className}>
+        <circle cx="0.5" cy="0.5" r="0.34" fill="#ffffff" />
+        <path d="M0.5 0.16a0.34 0.34 0 0 1 0.34 0.34h-0.22a0.12 0.12 0 0 0-0.12-0.12z" fill="#d9423d" />
+        <path d="M0.84 0.5a0.34 0.34 0 0 1-0.34 0.34v-0.22a0.12 0.12 0 0 0 0.12-0.12z" fill="#246db7" />
+        <path d="M0.5 0.84a0.34 0.34 0 0 1-0.34-0.34h0.22a0.12 0.12 0 0 0 0.12 0.12z" fill="#f0b82f" />
+        <path d="M0.16 0.5a0.34 0.34 0 0 1 0.34-0.34v0.22a0.12 0.12 0 0 0-0.12 0.12z" fill="#2f9460" />
+      </g>
+    );
+  }
+  return <circle className={className} cx="0.5" cy="0.5" r="0.32" fill={color} />;
+}
+
+function GoalMarker({ target, useRasterAssets }: { target: Target; useRasterAssets: boolean }) {
+  return (
+    <span className="goal-marker-frame">
+      {useRasterAssets ? (
+        <img className="goal-marker" src={targetImageFor(target)} alt="" style={targetMarkerStyle(target)} />
+      ) : (
+        <svg className="goal-marker-fallback" viewBox="0 0 1 1" aria-hidden="true">
+          <FallbackTargetShape target={target} />
+        </svg>
+      )}
+    </span>
+  );
+}
+
 function BoardView({
   board,
   robots,
   target,
   showActiveTarget,
-  onMove
+  onMove,
+  useRasterAssets
 }: {
   board: Board;
   robots: RobotPositions;
   target: Target;
   showActiveTarget: boolean;
   onMove?: (robot: RobotColor, dx: number, dy: number) => void;
+  useRasterAssets: boolean;
 }) {
   const pointerStart = React.useRef<{ x: number; y: number; robot: RobotColor } | null>(null);
   const [displayRobots, setDisplayRobots] = React.useState<RobotRenderPositions>(() => cloneRobotPositions(robots));
@@ -363,6 +450,18 @@ function BoardView({
       {board.targets.map((item) => {
         const box = targetImageBox(item, 0.86);
         const isActiveTarget = showActiveTarget && sameCell(item, target) && item.color === target.color && item.shape === target.shape;
+        const className = isActiveTarget ? "target-image active-target" : "target-image";
+        if (!useRasterAssets) {
+          return (
+            <g
+              key={`target-${item.x}-${item.y}-${item.color}-${item.shape}`}
+              transform={`translate(${item.x + box.x} ${item.y + box.y}) scale(${box.size})`}
+              aria-label={targetLabel(item)}
+            >
+              <FallbackTargetShape target={item} className={className} />
+            </g>
+          );
+        }
         return (
           <image
             key={`target-${item.x}-${item.y}-${item.color}-${item.shape}`}
@@ -371,7 +470,7 @@ function BoardView({
             y={item.y + box.y}
             width={box.size}
             height={box.size}
-            className={isActiveTarget ? "target-image active-target" : "target-image"}
+            className={className}
             aria-label={targetLabel(item)}
             preserveAspectRatio="xMidYMid meet"
           />
@@ -379,16 +478,23 @@ function BoardView({
       })}
       {Object.entries(displayRobots).map(([color, cell]) => (
         <g key={color} className="robot-hit">
-          <image
-            href={pieceImageFor(color as RobotColor)}
-            x={cell.x + 0.07}
-            y={cell.y + 0.07}
-            width="0.86"
-            height="0.86"
-            className="robot-piece"
-            aria-label={`${color} robot`}
-            preserveAspectRatio="xMidYMid meet"
-          />
+          {useRasterAssets ? (
+            <image
+              href={pieceImageFor(color as RobotColor)}
+              x={cell.x + 0.07}
+              y={cell.y + 0.07}
+              width="0.86"
+              height="0.86"
+              className="robot-piece"
+              aria-label={`${color} robot`}
+              preserveAspectRatio="xMidYMid meet"
+            />
+          ) : (
+            <g className="robot-piece-fallback" aria-label={`${color} robot`}>
+              <circle cx={cell.x + 0.5} cy={cell.y + 0.5} r="0.36" fill={fallbackColor[color as RobotColor]} />
+              <circle cx={cell.x + 0.5} cy={cell.y + 0.5} r="0.16" fill="rgba(255,255,255,0.84)" />
+            </g>
+          )}
         </g>
       ))}
     </svg>
@@ -482,7 +588,8 @@ function GameControls({
   onUndo,
   onReset,
   onSubmit,
-  isSubmitting
+  isSubmitting,
+  useRasterAssets
 }: {
   state: PublicRoomState;
   local: LocalPlayState | null;
@@ -491,6 +598,7 @@ function GameControls({
   onReset: () => void;
   onSubmit: () => void;
   isSubmitting: boolean;
+  useRasterAssets: boolean;
 }) {
   const now = useNow();
   const round = state.currentRound;
@@ -501,9 +609,7 @@ function GameControls({
     <section className="panel controls">
       <div className="goal-cell" aria-label={round ? `目標: ${targetLabel(round.target)}` : "待機中"}>
         {round ? (
-          <span className="goal-marker-frame">
-            <img className="goal-marker" src={targetImageFor(round.target)} alt="" style={targetMarkerStyle(round.target)} />
-          </span>
+          <GoalMarker target={round.target} useRasterAssets={useRasterAssets} />
         ) : (
           <strong>待機中</strong>
         )}
@@ -592,7 +698,8 @@ function Room({
   state,
   playerId,
   error,
-  acceptedSubmission
+  acceptedSubmission,
+  assetState
 }: {
   ws: WebSocket | null;
   socketReady: boolean;
@@ -600,6 +707,7 @@ function Room({
   playerId: string;
   error: string;
   acceptedSubmission: AcceptedSubmission | null;
+  assetState: AssetLoadState;
 }) {
   const round = state.currentRound;
   const [local, setLocal] = React.useState<LocalPlayState | null>(null);
@@ -759,6 +867,8 @@ function Room({
   const roomUrl = `${window.location.origin}/room/${state.roomId}`;
   const submitted = round?.submissionSummary.submittedPlayerIds.length ?? 0;
   const hasSubmitted = Boolean(round?.submissionSummary.submittedPlayerIds.includes(playerId));
+  const assetsSettled = assetState !== "loading";
+  const useRasterAssets = assetState === "ready";
 
   React.useEffect(() => {
     if (!hasSubmitted) return;
@@ -796,9 +906,14 @@ function Room({
             <span>{currentPlayer ? `あなた: ${displayPlayerName(currentPlayer.name)}` : "接続中"}</span>
             <span>送信済み: {submitted} / {state.players.length}</span>
             {state.phase === "waiting" ? (
-              <button onClick={startGame} disabled={isStarting || !socketReady || !isSocketOpen(ws)}>
+              <button onClick={startGame} disabled={isStarting || !assetsSettled || !socketReady || !isSocketOpen(ws)}>
                 {isStarting ? <LoadingLabel label="準備中..." /> : <><Play size={18} /> 開始</>}
               </button>
+            ) : null}
+            {state.phase === "waiting" && !assetsSettled ? (
+              <span className="loading-status" role="status" aria-live="polite">
+                <LoadingLabel label="画像を読み込み中..." />
+              </span>
             ) : null}
             {state.phase === "playing" ? (
               <button className="secondary" onClick={forceEndRound} disabled={isForcingRoundEnd || !socketReady || !isSocketOpen(ws)}>
@@ -814,7 +929,7 @@ function Room({
         </aside>
 
         <section className="play-area">
-          <BoardView board={board} robots={robots} target={target} showActiveTarget={Boolean(round)} onMove={moveRobot} />
+          <BoardView board={board} robots={robots} target={target} showActiveTarget={Boolean(round)} onMove={moveRobot} useRasterAssets={useRasterAssets} />
           <GameControls
             state={state}
             local={local}
@@ -823,6 +938,7 @@ function Room({
             onReset={reset}
             onSubmit={submit}
             isSubmitting={isSubmittingSolution}
+            useRasterAssets={useRasterAssets}
           />
         </section>
       </section>
@@ -832,11 +948,20 @@ function Room({
 
 function App() {
   const { ws, socketReady, state, playerId, error, notice, acceptedSubmission } = useSocket();
+  const assetState = useGameImageAssets();
 
   return (
     <>
       {state ? (
-        <Room ws={ws} socketReady={socketReady} state={state} playerId={playerId} error={error} acceptedSubmission={acceptedSubmission} />
+        <Room
+          ws={ws}
+          socketReady={socketReady}
+          state={state}
+          playerId={playerId}
+          error={error}
+          acceptedSubmission={acceptedSubmission}
+          assetState={assetState}
+        />
       ) : (
         <Lobby ws={ws} socketReady={socketReady} playerId={playerId} error={error} />
       )}

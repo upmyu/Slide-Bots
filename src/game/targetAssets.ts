@@ -47,6 +47,11 @@ const targetImages: Record<ColoredTargetColor, Record<ColoredTargetShape, string
   }
 };
 
+export const allTargetImages = [
+  allSpiral,
+  ...Object.values(targetImages).flatMap((imagesByShape) => Object.values(imagesByShape))
+];
+
 export function targetImageFor(target: Target): string {
   if (target.color === "rainbow" || target.shape === "vortex") {
     return allSpiral;

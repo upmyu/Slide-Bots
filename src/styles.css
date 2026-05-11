@@ -285,10 +285,24 @@ label {
   pointer-events: none;
 }
 
+.target-image,
+.goal-marker-fallback {
+  stroke: rgba(255, 255, 255, 0.95);
+  stroke-width: 0.055;
+  paint-order: stroke fill;
+}
+
 .robot-piece {
   pointer-events: none;
   filter: drop-shadow(0 0 0.035px rgba(255, 255, 255, 0.95)) drop-shadow(0 0 0.07px rgba(15, 21, 29, 0.86))
     drop-shadow(0 0.08px 0.12px rgba(0, 0, 0, 0.58));
+}
+
+.robot-piece-fallback {
+  pointer-events: none;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 0.07;
+  filter: drop-shadow(0 0.06px 0.08px rgba(0, 0, 0, 0.38));
 }
 
 .active-target {
@@ -391,6 +405,13 @@ label {
   display: block;
   object-fit: contain;
   pointer-events: none;
+}
+
+.goal-marker-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
 }
 
 .controls strong {
