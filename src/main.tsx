@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { RotateCcw, Undo2, Copy, Play, Send, StepForward, Flag, LogOut, Loader2 } from "lucide-react";
 import { fixedBoard } from "./game/boards/fixedBoard";
+import { pieceImageFor } from "./game/pieceAssets";
 import { applyMove, detectSwipeDirection, isGoalReached, robotAt, sameCell } from "./game/rules";
 import { targetImageFor } from "./game/targetAssets";
 import { Board, ClientMessage, Move, PublicRoomState, RobotColor, RobotPositions, RoundResult, ServerMessage, Target, TargetColor, robotColors } from "./game/types";
@@ -18,14 +19,6 @@ type LobbyPendingAction = "create" | "join" | null;
 type AcceptedSubmission = {
   moveCount: number;
   receivedAt: number;
-};
-
-const colorLabel: Record<RobotColor, string> = {
-  red: "R",
-  blue: "B",
-  green: "G",
-  yellow: "Y",
-  black: "K"
 };
 
 const colorName: Record<TargetColor, string> = {
@@ -386,10 +379,16 @@ function BoardView({
       })}
       {Object.entries(displayRobots).map(([color, cell]) => (
         <g key={color} className="robot-hit">
-          <circle cx={cell.x + 0.5} cy={cell.y + 0.5} r="0.44" className={`robot ${color}`} />
-          <text x={cell.x + 0.5} y={cell.y + 0.64} className="robot-label">
-            {colorLabel[color as RobotColor]}
-          </text>
+          <image
+            href={pieceImageFor(color as RobotColor)}
+            x={cell.x + 0.07}
+            y={cell.y + 0.07}
+            width="0.86"
+            height="0.86"
+            className="robot-piece"
+            aria-label={`${color} robot`}
+            preserveAspectRatio="xMidYMid meet"
+          />
         </g>
       ))}
     </svg>

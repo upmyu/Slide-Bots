@@ -285,6 +285,11 @@ label {
   pointer-events: none;
 }
 
+.robot-piece {
+  pointer-events: none;
+  filter: drop-shadow(0 0.05px 0.08px rgba(0, 0, 0, 0.42));
+}
+
 .active-target {
   animation: target-pulse 1.8s ease-in-out infinite;
   filter: brightness(1.14) saturate(1.36) contrast(1.06) drop-shadow(0 0 0.16px rgba(255, 255, 255, 0.98))
