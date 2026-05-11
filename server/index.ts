@@ -51,6 +51,8 @@ type ManagedRoom = RoomState & {
   roundTimer?: NodeJS.Timeout;
   lastRoundResult?: RoundResult;
   gameResult?: GameResult;
+  preparedRoundSetup?: RoundSetup;
+  isPreparingRoundSetup?: boolean;
 };
 type RoundSetup = ReturnType<typeof generateRoundSetup>;
 
@@ -70,6 +72,18 @@ function warmRoundSetup(): void {
       if (warmRoundSetups.length < 2) warmRoundSetup();
     }
   }, 500);
+}
+
+function prepareRoomRoundSetup(room: ManagedRoom): void {
+  if (room.preparedRoundSetup || room.isPreparingRoundSetup) return;
+  room.isPreparingRoundSetup = true;
+  setTimeout(() => {
+    try {
+      room.preparedRoundSetup = generateRoundSetup();
+    } finally {
+      room.isPreparingRoundSetup = false;
+    }
+  }, 0);
 }
 
 function randomId(length: number): string {
@@ -152,6 +166,7 @@ function createRoom(ws: WebSocket, name: string, requestedPlayerId?: string): vo
   };
   rooms.set(roomId, room);
   attachPlayer(room, ws, playerId, name);
+  prepareRoomRoundSetup(room);
   send(ws, { type: "roomCreated", roomId, playerId, state: publicState(room) });
   broadcast(room);
 }
@@ -174,12 +189,14 @@ function joinRoom(ws: WebSocket, roomId: string, name: string, requestedPlayerId
 
   const playerId = requestedPlayerId || randomId(12);
   attachPlayer(room, ws, playerId, name);
+  prepareRoomRoundSetup(room);
   send(ws, { type: "joinedRoom", playerId, state: publicState(room) });
   broadcast(room);
 }
 
 function startRound(room: ManagedRoom, roundNumber: number): void {
-  const setup = warmRoundSetups.shift() ?? generateRoundSetup();
+  const setup = room.preparedRoundSetup ?? warmRoundSetups.shift() ?? generateRoundSetup();
+  room.preparedRoundSetup = undefined;
   const startedAt = Date.now();
   room.phase = "playing";
   room.lastRoundResult = undefined;
@@ -195,6 +212,7 @@ function startRound(room: ManagedRoom, roundNumber: number): void {
   if (room.roundTimer) clearTimeout(room.roundTimer);
   room.roundTimer = setTimeout(() => finishRound(room), room.roundTimeSeconds * 1000 + 250);
   broadcast(room);
+  prepareRoomRoundSetup(room);
   warmRoundSetup();
 }
 
