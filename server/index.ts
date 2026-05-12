@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { brotliCompressSync, gzipSync, constants as zlibConstants } from "node:zlib";
 import { WebSocket, WebSocketServer } from "ws";
 import { createServer as createViteServer } from "vite";
-import { generateRoundSetup } from "../src/game/roundGenerator";
+import { generateRoundSetupAsync } from "../src/game/roundGenerator";
 import { validateSubmission } from "../src/game/rules";
 import {
   ClientMessage,
@@ -119,12 +119,11 @@ type ManagedRoom = RoomState & {
   roundTimer?: NodeJS.Timeout;
   lastRoundResult?: RoundResult;
   gameResult?: GameResult;
-  preparedRoundSetup?: RoundSetup;
-  isPreparingRoundSetup?: boolean;
+  isStartingRound?: boolean;
   lastActivityAt: number;
   emptySince?: number;
 };
-type RoundSetup = ReturnType<typeof generateRoundSetup>;
+type RoundSetup = Awaited<ReturnType<typeof generateRoundSetupAsync>>;
 
 const rooms = new Map<string, ManagedRoom>();
 const clients = new WeakMap<WebSocket, ClientContext>();
@@ -161,32 +160,9 @@ function sweepRooms(): void {
     }
   }
 }
-const warmRoundSetups: RoundSetup[] = [];
-let isWarmingRoundSetup = false;
-
-function warmRoundSetup(): void {
-  if (isWarmingRoundSetup || warmRoundSetups.length >= 2) return;
-  isWarmingRoundSetup = true;
-  setTimeout(() => {
-    try {
-      warmRoundSetups.push(generateRoundSetup());
-    } finally {
-      isWarmingRoundSetup = false;
-      if (warmRoundSetups.length < 2) warmRoundSetup();
-    }
-  }, 500);
-}
-
-function prepareRoomRoundSetup(room: ManagedRoom): void {
-  if (room.preparedRoundSetup || room.isPreparingRoundSetup) return;
-  room.isPreparingRoundSetup = true;
-  setTimeout(() => {
-    try {
-      room.preparedRoundSetup = generateRoundSetup();
-    } finally {
-      room.isPreparingRoundSetup = false;
-    }
-  }, 0);
+async function takeRoundSetup(room: ManagedRoom): Promise<RoundSetup> {
+  touchRoom(room);
+  return generateRoundSetupAsync();
 }
 
 function randomId(length: number): string {
@@ -285,7 +261,6 @@ function createRoom(ws: WebSocket, name: string, requestedPlayerId?: string): vo
   };
   rooms.set(roomId, room);
   attachPlayer(room, ws, playerId, name);
-  prepareRoomRoundSetup(room);
   touchRoom(room);
   send(ws, { type: "roomCreated", roomId, playerId, state: publicState(room) });
   broadcast(room);
@@ -309,15 +284,22 @@ function joinRoom(ws: WebSocket, roomId: string, name: string, requestedPlayerId
 
   const playerId = requestedPlayerId || randomId(12);
   attachPlayer(room, ws, playerId, name);
-  prepareRoomRoundSetup(room);
   touchRoom(room);
   send(ws, { type: "joinedRoom", playerId, state: publicState(room) });
   broadcast(room);
 }
 
-function startRound(room: ManagedRoom, roundNumber: number): void {
-  const setup = room.preparedRoundSetup ?? warmRoundSetups.shift() ?? generateRoundSetup();
-  room.preparedRoundSetup = undefined;
+async function startRound(room: ManagedRoom, roundNumber: number): Promise<void> {
+  if (room.isStartingRound) return;
+  room.isStartingRound = true;
+  let setup: RoundSetup;
+  try {
+    setup = await takeRoundSetup(room);
+  } finally {
+    room.isStartingRound = false;
+  }
+  if (!rooms.has(room.roomId) || (room.phase !== "waiting" && room.phase !== "roundResult")) return;
+
   const startedAt = Date.now();
   room.phase = "playing";
   room.lastRoundResult = undefined;
@@ -334,8 +316,6 @@ function startRound(room: ManagedRoom, roundNumber: number): void {
   room.roundTimer = setTimeout(() => finishRound(room), room.roundTimeSeconds * 1000 + 250);
   touchRoom(room);
   broadcast(room);
-  prepareRoomRoundSetup(room);
-  warmRoundSetup();
 }
 
 function startGame(room: ManagedRoom): void {
@@ -344,7 +324,7 @@ function startGame(room: ManagedRoom): void {
   room.players.forEach((player) => {
     player.score = 0;
   });
-  startRound(room, 1);
+  void startRound(room, 1);
 }
 
 function toValidSubmission(round: NonNullable<RoomState["currentRound"]>, submission: Submission): ValidSubmission | null {
@@ -504,7 +484,7 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
   if (message.type === "forceEndRound") finishRound(room);
   if (message.type === "submitSolution") submitSolution(room, context.playerId, message.moves, ws);
   if (message.type === "nextRound" && room.phase === "roundResult" && room.currentRound) {
-    startRound(room, room.currentRound.roundNumber + 1);
+    void startRound(room, room.currentRound.roundNumber + 1);
   }
   if (message.type === "leaveRoom") {
     leaveRoom(room, context.playerId, ws);
