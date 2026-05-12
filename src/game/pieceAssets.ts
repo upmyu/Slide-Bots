@@ -1,8 +1,8 @@
-import blackPiece from "../assets/pieces/processed/black.png";
-import bluePiece from "../assets/pieces/processed/blue.png";
-import greenPiece from "../assets/pieces/processed/green.png";
-import redPiece from "../assets/pieces/processed/red.png";
-import yellowPiece from "../assets/pieces/processed/yellow.png";
+import blackPiece from "../assets/pieces/black.webp";
+import bluePiece from "../assets/pieces/blue.webp";
+import greenPiece from "../assets/pieces/green.webp";
+import redPiece from "../assets/pieces/red.webp";
+import yellowPiece from "../assets/pieces/yellow.webp";
 import type { RobotColor } from "./types";
 
 const pieceImages: Record<RobotColor, string> = {

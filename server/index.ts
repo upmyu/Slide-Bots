@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { brotliCompressSync, gzipSync, constants as zlibConstants } from "node:zlib";
 import { WebSocket, WebSocketServer } from "ws";
 import { createServer as createViteServer } from "vite";
 import { generateRoundSetup } from "../src/game/roundGenerator";
@@ -26,6 +27,11 @@ const port = Number(process.env.PORT ?? 5173);
 const totalRounds = 10;
 const roundTimeSeconds = 150;
 const maxPlayers = 10;
+const maxRooms = 500;
+const roomIdleTimeoutMs = 30 * 60 * 1000;
+const emptyRoomGraceMs = 5 * 60 * 1000;
+const roomSweepIntervalMs = 60 * 1000;
+const messagesPerSecondLimit = 20;
 
 const contentTypes: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -37,13 +43,75 @@ const contentTypes: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".webp": "image/webp",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
   ".ico": "image/x-icon"
 };
+
+const compressibleTypes = new Set([".html", ".js", ".css", ".json", ".svg", ".ico"]);
+
+type StaticEntry = {
+  body: Buffer;
+  gzip?: Buffer;
+  br?: Buffer;
+  contentType: string;
+  cacheControl: string;
+  etag: string;
+};
+
+const staticCache = new Map<string, StaticEntry>();
+
+function pickEncoding(acceptEncoding: string | undefined, entry: StaticEntry): { body: Buffer; encoding?: string } {
+  const accept = acceptEncoding ?? "";
+  if (entry.br && /\bbr\b/.test(accept)) return { body: entry.br, encoding: "br" };
+  if (entry.gzip && /\bgzip\b/.test(accept)) return { body: entry.gzip, encoding: "gzip" };
+  return { body: entry.body };
+}
+
+function makeEtag(body: Buffer): string {
+  let hash = 0xcbf29ce484222325n;
+  const prime = 0x100000001b3n;
+  for (const byte of body) {
+    hash = BigInt.asUintN(64, (hash ^ BigInt(byte)) * prime);
+  }
+  return `"${body.length.toString(36)}-${hash.toString(36)}"`;
+}
+
+async function loadStaticEntry(filePath: string, urlPath: string): Promise<StaticEntry> {
+  const body = await readFile(filePath);
+  const ext = path.extname(filePath);
+  const contentType = contentTypes[ext] ?? "application/octet-stream";
+  const isHashedAsset = urlPath.startsWith("/assets/");
+  const cacheControl = isHashedAsset
+    ? "public, max-age=31536000, immutable"
+    : "public, max-age=0, must-revalidate";
+
+  const entry: StaticEntry = {
+    body,
+    contentType,
+    cacheControl,
+    etag: makeEtag(body)
+  };
+
+  if (compressibleTypes.has(ext) && body.length >= 512) {
+    entry.gzip = gzipSync(body, { level: 9 });
+    entry.br = brotliCompressSync(body, {
+      params: {
+        [zlibConstants.BROTLI_PARAM_QUALITY]: 11,
+        [zlibConstants.BROTLI_PARAM_SIZE_HINT]: body.length
+      }
+    });
+  }
+
+  return entry;
+}
 
 type ClientContext = {
   ws: WebSocket;
   roomId?: string;
   playerId?: string;
+  rateWindowStart: number;
+  rateCount: number;
 };
 
 type ManagedRoom = RoomState & {
@@ -53,11 +121,46 @@ type ManagedRoom = RoomState & {
   gameResult?: GameResult;
   preparedRoundSetup?: RoundSetup;
   isPreparingRoundSetup?: boolean;
+  lastActivityAt: number;
+  emptySince?: number;
 };
 type RoundSetup = ReturnType<typeof generateRoundSetup>;
 
 const rooms = new Map<string, ManagedRoom>();
 const clients = new WeakMap<WebSocket, ClientContext>();
+
+function touchRoom(room: ManagedRoom): void {
+  room.lastActivityAt = Date.now();
+  const hasConnected = room.players.some((player) => player.connected);
+  room.emptySince = hasConnected ? undefined : room.emptySince ?? Date.now();
+}
+
+function destroyRoom(room: ManagedRoom): void {
+  if (room.roundTimer) {
+    clearTimeout(room.roundTimer);
+    room.roundTimer = undefined;
+  }
+  for (const ws of room.sockets.values()) {
+    const context = clients.get(ws);
+    if (context) {
+      context.roomId = undefined;
+      context.playerId = undefined;
+    }
+  }
+  room.sockets.clear();
+  rooms.delete(room.roomId);
+}
+
+function sweepRooms(): void {
+  const now = Date.now();
+  for (const room of rooms.values()) {
+    const idleFor = now - room.lastActivityAt;
+    const emptyFor = room.emptySince ? now - room.emptySince : 0;
+    if (emptyFor > emptyRoomGraceMs || idleFor > roomIdleTimeoutMs) {
+      destroyRoom(room);
+    }
+  }
+}
 const warmRoundSetups: RoundSetup[] = [];
 let isWarmingRoundSetup = false;
 
@@ -149,11 +252,26 @@ function attachPlayer(room: ManagedRoom, ws: WebSocket, playerId: string, name: 
     player.connected = true;
   }
   room.sockets.set(player.id, ws);
-  clients.set(ws, { ws, roomId: room.roomId, playerId: player.id });
+  const existing = clients.get(ws);
+  clients.set(ws, {
+    ws,
+    roomId: room.roomId,
+    playerId: player.id,
+    rateWindowStart: existing?.rateWindowStart ?? Date.now(),
+    rateCount: existing?.rateCount ?? 0
+  });
+  touchRoom(room);
   return player;
 }
 
 function createRoom(ws: WebSocket, name: string, requestedPlayerId?: string): void {
+  if (rooms.size >= maxRooms) {
+    sweepRooms();
+  }
+  if (rooms.size >= maxRooms) {
+    send(ws, { type: "error", message: "現在は新しい部屋を作れません。しばらくしてからお試しください。" });
+    return;
+  }
   const roomId = uniqueRoomId();
   const playerId = requestedPlayerId || randomId(12);
   const room: ManagedRoom = {
@@ -162,11 +280,13 @@ function createRoom(ws: WebSocket, name: string, requestedPlayerId?: string): vo
     players: [],
     totalRounds,
     roundTimeSeconds,
-    sockets: new Map()
+    sockets: new Map(),
+    lastActivityAt: Date.now()
   };
   rooms.set(roomId, room);
   attachPlayer(room, ws, playerId, name);
   prepareRoomRoundSetup(room);
+  touchRoom(room);
   send(ws, { type: "roomCreated", roomId, playerId, state: publicState(room) });
   broadcast(room);
 }
@@ -190,6 +310,7 @@ function joinRoom(ws: WebSocket, roomId: string, name: string, requestedPlayerId
   const playerId = requestedPlayerId || randomId(12);
   attachPlayer(room, ws, playerId, name);
   prepareRoomRoundSetup(room);
+  touchRoom(room);
   send(ws, { type: "joinedRoom", playerId, state: publicState(room) });
   broadcast(room);
 }
@@ -211,6 +332,7 @@ function startRound(room: ManagedRoom, roundNumber: number): void {
   };
   if (room.roundTimer) clearTimeout(room.roundTimer);
   room.roundTimer = setTimeout(() => finishRound(room), room.roundTimeSeconds * 1000 + 250);
+  touchRoom(room);
   broadcast(room);
   prepareRoomRoundSetup(room);
   warmRoundSetup();
@@ -313,6 +435,7 @@ function submitSolution(room: ManagedRoom, playerId: string, moves: Move[], ws: 
     return;
   }
 
+  touchRoom(room);
   send(ws, { type: "submissionAccepted", moveCount: moves.length });
   broadcast(room);
 }
@@ -321,12 +444,39 @@ function leaveRoom(room: ManagedRoom, playerId: string, ws: WebSocket): void {
   room.sockets.delete(playerId);
   const player = room.players.find((candidate) => candidate.id === playerId);
   if (player) player.connected = false;
-  clients.set(ws, { ws });
+  const existing = clients.get(ws);
+  clients.set(ws, {
+    ws,
+    rateWindowStart: existing?.rateWindowStart ?? Date.now(),
+    rateCount: existing?.rateCount ?? 0
+  });
+  touchRoom(room);
   send(ws, { type: "leftRoom" });
   broadcast(room);
 }
 
+function isRateLimited(ws: WebSocket): boolean {
+  const context = clients.get(ws);
+  if (!context) return false;
+  const now = Date.now();
+  if (now - context.rateWindowStart >= 1000) {
+    context.rateWindowStart = now;
+    context.rateCount = 0;
+  }
+  context.rateCount += 1;
+  return context.rateCount > messagesPerSecondLimit;
+}
+
 function handleClientMessage(ws: WebSocket, raw: string): void {
+  if (raw.length > 16 * 1024) {
+    send(ws, { type: "error", message: "通信データが大きすぎます。" });
+    return;
+  }
+  if (isRateLimited(ws)) {
+    send(ws, { type: "error", message: "操作が速すぎます。少し待ってからお試しください。" });
+    return;
+  }
+
   let message: ClientMessage;
   try {
     message = JSON.parse(raw) as ClientMessage;
@@ -370,6 +520,7 @@ function handleDisconnect(ws: WebSocket): void {
   room.sockets.delete(context.playerId);
   const player = room.players.find((candidate) => candidate.id === context.playerId);
   if (player) player.connected = false;
+  touchRoom(room);
   broadcast(room);
 }
 
@@ -404,23 +555,52 @@ const server = createServer(async (req, res) => {
   const urlPath = requestUrl.pathname === "/" || requestUrl.pathname.startsWith("/room/")
     ? "/index.html"
     : requestUrl.pathname;
-  try {
-    const filePath = path.join(root, "dist", urlPath);
-    const body = await readFile(filePath);
-    res.setHeader("Content-Type", contentTypes[path.extname(filePath)] ?? "application/octet-stream");
-    res.end(body);
-  } catch {
+  const distRoot = path.join(root, "dist");
+  const filePath = path.normalize(path.join(distRoot, urlPath));
+  if (!filePath.startsWith(distRoot)) {
     res.statusCode = 404;
     res.end("見つかりません");
+    return;
   }
+
+  let entry = staticCache.get(filePath);
+  if (!entry) {
+    try {
+      entry = await loadStaticEntry(filePath, urlPath);
+      staticCache.set(filePath, entry);
+    } catch {
+      res.statusCode = 404;
+      res.end("見つかりません");
+      return;
+    }
+  }
+
+  if (req.headers["if-none-match"] === entry.etag) {
+    res.statusCode = 304;
+    res.setHeader("ETag", entry.etag);
+    res.setHeader("Cache-Control", entry.cacheControl);
+    res.end();
+    return;
+  }
+
+  const picked = pickEncoding(req.headers["accept-encoding"]?.toString(), entry);
+  res.setHeader("Content-Type", entry.contentType);
+  res.setHeader("Cache-Control", entry.cacheControl);
+  res.setHeader("ETag", entry.etag);
+  res.setHeader("Vary", "Accept-Encoding");
+  if (picked.encoding) res.setHeader("Content-Encoding", picked.encoding);
+  res.setHeader("Content-Length", picked.body.length);
+  res.end(picked.body);
 });
 
-const wss = new WebSocketServer({ server, path: "/ws" });
+const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 64 * 1024 });
 wss.on("connection", (ws) => {
-  clients.set(ws, { ws });
+  clients.set(ws, { ws, rateWindowStart: Date.now(), rateCount: 0 });
   ws.on("message", (data) => handleClientMessage(ws, data.toString()));
   ws.on("close", () => handleDisconnect(ws));
 });
+
+setInterval(sweepRooms, roomSweepIntervalMs).unref();
 
 server.listen(port, "0.0.0.0", () => {
   console.log(`Slide Bots running at http://localhost:${port}`);

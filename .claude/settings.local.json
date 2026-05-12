@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"try{require\\('sharp'\\);console.log\\('sharp:OK'\\)}catch\\(e\\){console.log\\('sharp:NO'\\)}\")",
+      "Bash(python -c \"from PIL import Image; print\\('PIL:OK', Image.__version__\\)\")",
+      "Bash(python3 -c \"from PIL import Image; print\\('PIL3:OK', Image.__version__\\)\")",
+      "Bash(npx --yes sharp-cli --version)",
+      "Bash(npx --yes sharp-cli --help)",
+      "Bash(npm install *)",
+      "Bash(node -e \"console.log\\(require\\('sharp'\\).versions\\)\")",
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(mv src/assets/pieces/webp/*.webp src/assets/pieces/)",
+      "Bash(mv src/assets/goals/webp/*.webp src/assets/goals/)",
+      "Bash(rm src/assets/pieces/*.png)",
+      "Bash(rm src/assets/goals/*.png)",
+      "Bash(npx tsc *)",
+      "Bash(npx vitest *)",
+      "Bash(npx vite *)",
+      "Bash(curl -sf http://localhost:5180/)",
+      "Bash(npm uninstall *)"
+    ]
+  }
+}
