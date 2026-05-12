@@ -112,7 +112,10 @@ type ClientContext = {
   playerId?: string;
   rateWindowStart: number;
   rateCount: number;
+  isAlive: boolean;
 };
+
+const heartbeatIntervalMs = 30 * 1000;
 
 type ManagedRoom = RoomState & {
   sockets: Map<string, WebSocket>;
@@ -258,7 +261,8 @@ function attachPlayer(room: ManagedRoom, ws: WebSocket, playerId: string, name: 
     roomId: room.roomId,
     playerId: player.id,
     rateWindowStart: existing?.rateWindowStart ?? Date.now(),
-    rateCount: existing?.rateCount ?? 0
+    rateCount: existing?.rateCount ?? 0,
+    isAlive: existing?.isAlive ?? true
   });
   touchRoom(room);
   return player;
@@ -448,7 +452,8 @@ function leaveRoom(room: ManagedRoom, playerId: string, ws: WebSocket): void {
   clients.set(ws, {
     ws,
     rateWindowStart: existing?.rateWindowStart ?? Date.now(),
-    rateCount: existing?.rateCount ?? 0
+    rateCount: existing?.rateCount ?? 0,
+    isAlive: existing?.isAlive ?? true
   });
   touchRoom(room);
   send(ws, { type: "leftRoom" });
@@ -595,9 +600,63 @@ const server = createServer(async (req, res) => {
 
 const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 64 * 1024 });
 wss.on("connection", (ws) => {
-  clients.set(ws, { ws, rateWindowStart: Date.now(), rateCount: 0 });
+  clients.set(ws, { ws, rateWindowStart: Date.now(), rateCount: 0, isAlive: true });
   ws.on("message", (data) => handleClientMessage(ws, data.toString()));
   ws.on("close", () => handleDisconnect(ws));
+  ws.on("error", (error) => {
+    console.error("WebSocket error:", error);
+  });
+  ws.on("pong", () => {
+    const context = clients.get(ws);
+    if (context) context.isAlive = true;
+  });
+});
+
+wss.on("error", (error) => {
+  console.error("WebSocketServer error:", error);
+});
+
+const heartbeatTimer = setInterval(() => {
+  for (const ws of wss.clients) {
+    const context = clients.get(ws);
+    if (!context) {
+      ws.terminate();
+      continue;
+    }
+    if (!context.isAlive) {
+      ws.terminate();
+      continue;
+    }
+    context.isAlive = false;
+    try {
+      ws.ping();
+    } catch (error) {
+      console.error("WebSocket ping failed:", error);
+      ws.terminate();
+    }
+  }
+}, heartbeatIntervalMs);
+heartbeatTimer.unref();
+
+wss.on("close", () => {
+  clearInterval(heartbeatTimer);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("uncaughtException:", error);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("unhandledRejection:", reason);
+});
+
+server.on("clientError", (error, socket) => {
+  console.error("HTTP clientError:", error);
+  if (socket.writable) {
+    socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
+  } else {
+    socket.destroy();
+  }
 });
 
 setInterval(sweepRooms, roomSweepIntervalMs).unref();
