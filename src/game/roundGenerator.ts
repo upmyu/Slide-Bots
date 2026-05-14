@@ -1,16 +1,8 @@
 import { fixedBoard } from "./boards/fixedBoard";
 import { isBlocked, sameCell } from "./rules";
-import { solveBfs } from "./solver";
 import { Board, Cell, RobotPositions, Target, robotColors } from "./types";
 
-const setupPasses = [
-  { min: 6, max: 6, attempts: 6 },
-  { min: 4, max: 6, attempts: 6 },
-  { min: 1, max: 6, attempts: 6 }
-];
-
 const fallbackSetup = {
-  board: fixedBoard,
   target: { x: 3, y: 9, color: "yellow", shape: "cross" },
   initialRobots: {
     red: { x: 9, y: 5 },
@@ -20,7 +12,7 @@ const fallbackSetup = {
     black: { x: 13, y: 15 }
   },
   solutionMoves: 7
-} satisfies { board: Board; target: Target; initialRobots: RobotPositions; solutionMoves: number };
+} satisfies { target: Target; initialRobots: RobotPositions; solutionMoves: number };
 
 type RoundSetupOptions = {
   initialRobots?: RobotPositions;
@@ -76,39 +68,13 @@ function availableTargets(usedTargetKeys: string[] = []): Target[] {
   return targets.length > 0 ? targets : fixedBoard.targets;
 }
 
-function fallbackRoundSetup(options: RoundSetupOptions = {}) {
-  const used = new Set(options.usedTargetKeys ?? []);
-  const target = availableTargets(options.usedTargetKeys).find((candidate) => !used.has(targetKey(candidate))) ?? fallbackSetup.target;
-  const initialRobots = options.initialRobots ?? fallbackSetup.initialRobots;
-  const solution = solveBfs(fixedBoard, initialRobots, target, 25);
-  return {
-    ...fallbackSetup,
-    target,
-    initialRobots,
-    solutionMoves: solution.solvable ? solution.minMoves : fallbackSetup.solutionMoves
-  };
-}
-
 function generateRoundSetupWithOptions(
   options: RoundSetupOptions = {}
 ): { board: Board; target: Target; initialRobots: RobotPositions; solutionMoves: number } {
   const targets = availableTargets(options.usedTargetKeys);
-  for (const pass of setupPasses) {
-    for (let i = 0; i < pass.attempts; i += 1) {
-      const target = randomChoice(targets);
-      const initialRobots = options.initialRobots ?? generateRobotPositions(fixedBoard, target);
-      const solution = solveBfs(fixedBoard, initialRobots, target, pass.max);
-      if (solution.solvable && solution.minMoves >= pass.min && solution.minMoves <= pass.max) {
-        return { board: fixedBoard, target, initialRobots, solutionMoves: solution.minMoves };
-      }
-    }
-  }
-
-  return fallbackRoundSetup(options);
-}
-
-function yieldToEventLoop(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+  const target = targets.length > 0 ? randomChoice(targets) : fallbackSetup.target;
+  const initialRobots = options.initialRobots ?? generateRobotPositions(fixedBoard, target);
+  return { board: fixedBoard, target, initialRobots, solutionMoves: 0 };
 }
 
 export async function generateRoundSetupAsync(options: RoundSetupOptions = {}): Promise<{
@@ -117,18 +83,5 @@ export async function generateRoundSetupAsync(options: RoundSetupOptions = {}): 
   initialRobots: RobotPositions;
   solutionMoves: number;
 }> {
-  const targets = availableTargets(options.usedTargetKeys);
-  for (const pass of setupPasses) {
-    for (let i = 0; i < pass.attempts; i += 1) {
-      const target = randomChoice(targets);
-      const initialRobots = options.initialRobots ?? generateRobotPositions(fixedBoard, target);
-      const solution = solveBfs(fixedBoard, initialRobots, target, pass.max);
-      if (solution.solvable && solution.minMoves >= pass.min && solution.minMoves <= pass.max) {
-        return { board: fixedBoard, target, initialRobots, solutionMoves: solution.minMoves };
-      }
-      await yieldToEventLoop();
-    }
-  }
-
-  return fallbackRoundSetup(options);
+  return generateRoundSetupWithOptions(options);
 }
