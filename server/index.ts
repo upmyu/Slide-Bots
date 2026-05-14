@@ -5,14 +5,15 @@ import { fileURLToPath } from "node:url";
 import { brotliCompressSync, gzipSync, constants as zlibConstants } from "node:zlib";
 import { WebSocket, WebSocketServer } from "ws";
 import { createServer as createViteServer } from "vite";
-import { generateRoundSetupAsync } from "../src/game/roundGenerator";
-import { validateSubmission } from "../src/game/rules";
+import { generateRoundSetupAsync, targetKey } from "../src/game/roundGenerator";
+import { applyMoves, validateSubmission } from "../src/game/rules";
 import {
   ClientMessage,
   GameResult,
   Move,
   Player,
   PublicRoomState,
+  RobotPositions,
   RoomState,
   RoundResult,
   ServerMessage,
@@ -123,6 +124,8 @@ type ManagedRoom = RoomState & {
   lastRoundResult?: RoundResult;
   gameResult?: GameResult;
   isStartingRound?: boolean;
+  nextInitialRobots?: RobotPositions;
+  usedTargetKeys?: string[];
   lastActivityAt: number;
   emptySince?: number;
 };
@@ -165,7 +168,10 @@ function sweepRooms(): void {
 }
 async function takeRoundSetup(room: ManagedRoom): Promise<RoundSetup> {
   touchRoom(room);
-  return generateRoundSetupAsync();
+  return generateRoundSetupAsync({
+    initialRobots: room.nextInitialRobots,
+    usedTargetKeys: room.usedTargetKeys
+  });
 }
 
 function randomId(length: number): string {
@@ -316,6 +322,7 @@ async function startRound(room: ManagedRoom, roundNumber: number): Promise<void>
     deadline: startedAt + room.roundTimeSeconds * 1000,
     submissions: []
   };
+  room.usedTargetKeys = [...(room.usedTargetKeys ?? []), targetKey(setup.target)];
   if (room.roundTimer) clearTimeout(room.roundTimer);
   room.roundTimer = setTimeout(() => finishRound(room), room.roundTimeSeconds * 1000 + 250);
   touchRoom(room);
@@ -328,6 +335,10 @@ function startGame(room: ManagedRoom): void {
   room.players.forEach((player) => {
     player.score = 0;
   });
+  room.nextInitialRobots = undefined;
+  room.usedTargetKeys = [];
+  room.gameResult = undefined;
+  room.lastRoundResult = undefined;
   void startRound(room, 1);
 }
 
@@ -360,6 +371,9 @@ function finishRound(room: ManagedRoom): void {
     const winner = room.players.find((player) => player.id === winningSubmission.playerId);
     if (winner) winner.score += 1;
   }
+  room.nextInitialRobots = winningSubmission
+    ? applyMoves(round.board, round.initialRobots, winningSubmission.moves) ?? round.initialRobots
+    : round.initialRobots;
 
   const scores = Object.fromEntries(room.players.map((player) => [player.id, player.score]));
   const result: RoundResult = {
