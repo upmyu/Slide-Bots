@@ -466,10 +466,10 @@ label {
 
 .result > button {
   position: sticky;
-  bottom: -10px;
+  bottom: 0;
   z-index: 1;
-  margin: 2px -10px -10px;
-  border-radius: 0 0 8px 8px;
+  margin-top: 2px;
+  box-shadow: 0 -8px 14px rgba(248, 250, 251, 0.92);
 }
 
 .toast-stack {
