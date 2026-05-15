@@ -490,8 +490,26 @@ label {
   gap: 6px;
 }
 
+.replay-buttons {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.replay-buttons button {
+  white-space: nowrap;
+}
+
+.play-buttons-hidden {
+  display: none;
+}
+
 .controls > .buttons {
   display: flex;
+}
+
+.controls > .play-buttons-hidden {
+  display: none;
 }
 
 .submitted {

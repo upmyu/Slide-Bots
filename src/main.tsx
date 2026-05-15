@@ -16,6 +16,7 @@ type LocalPlayState = {
 
 type RobotRenderPositions = Record<RobotColor, { x: number; y: number }>;
 type LobbyPendingAction = "create" | "join" | null;
+type ReplayStatus = "idle" | "playing" | "finished";
 type AcceptedSubmission = {
   moveCount: number;
   receivedAt: number;
@@ -590,7 +591,11 @@ function GameControls({
   onReset,
   onSubmit,
   isSubmitting,
-  useRasterAssets
+  useRasterAssets,
+  replayAvailable = false,
+  replayStatus = "idle",
+  onReplayReset,
+  onReplayPlay
 }: {
   state: PublicRoomState;
   local: LocalPlayState | null;
@@ -600,11 +605,16 @@ function GameControls({
   onSubmit: () => void;
   isSubmitting: boolean;
   useRasterAssets: boolean;
+  replayAvailable?: boolean;
+  replayStatus?: ReplayStatus;
+  onReplayReset?: () => void;
+  onReplayPlay?: () => void;
 }) {
   const now = useNow();
   const round = state.currentRound;
   const deadlineOpen = round ? now < round.deadline : false;
   const canSubmit = state.phase === "playing" && goalReached && Boolean(local?.moveHistory.length) && deadlineOpen;
+  const isResultPhase = state.phase === "roundResult" || state.phase === "gameResult";
 
   return (
     <section className="panel controls">
@@ -619,7 +629,17 @@ function GameControls({
         <span className="eyebrow">手数</span>
         <strong>{local?.moveHistory.length ?? 0}</strong>
       </div>
-      <div className="buttons">
+      {isResultPhase ? (
+        <div className="replay-buttons">
+          <button className="secondary" onClick={onReplayReset} disabled={!replayAvailable || !onReplayReset} title="初期状態に戻す">
+            <RotateCcw size={18} /> 初期状態
+          </button>
+          <button onClick={onReplayPlay} disabled={!replayAvailable || replayStatus === "playing" || !onReplayPlay} title="リプレイを再生">
+            <Play size={18} /> {replayStatus === "playing" ? "再生中" : "再生"}
+          </button>
+        </div>
+      ) : null}
+      <div className={isResultPhase ? "buttons play-buttons-hidden" : "buttons"}>
         <button className="secondary icon" onClick={onUndo} disabled={!local?.moveHistory.length} title="1手戻す">
           <Undo2 size={18} />
         </button>
@@ -730,7 +750,9 @@ function Room({
   const [isForcingRoundEnd, setIsForcingRoundEnd] = React.useState(false);
   const [isSubmittingSolution, setIsSubmittingSolution] = React.useState(false);
   const [isFinalResultOpen, setIsFinalResultOpen] = React.useState(false);
+  const [replayStatus, setReplayStatus] = React.useState<ReplayStatus>("idle");
   const submitInFlightRef = React.useRef(false);
+  const replayTimersRef = React.useRef<number[]>([]);
   const now = useNow();
 
   React.useEffect(() => {
@@ -796,32 +818,50 @@ function Room({
     black: { x: 8, y: 0 }
   };
   const goalReached = round ? isGoalReached(board, robots, target) : false;
+  const winningReplayMoves = state.lastRoundResult?.winningSubmission?.moves;
+  const replayAvailable = Boolean(round && winningReplayMoves?.length && ["roundResult", "gameResult"].includes(state.phase));
 
-  React.useEffect(() => {
-    const result = state.lastRoundResult;
-    const winningMoves = result?.winningSubmission?.moves;
-    if (!round || !winningMoves || !["roundResult", "gameResult"].includes(state.phase)) return;
+  const clearReplayTimers = React.useCallback(() => {
+    replayTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    replayTimersRef.current = [];
+  }, []);
 
+  const resetWinningReplay = React.useCallback(() => {
+    clearReplayTimers();
+    if (!round || !["roundResult", "gameResult"].includes(state.phase)) return;
+    setLocal({ robots: round.initialRobots, moveHistory: [] });
+    setReplayStatus(winningReplayMoves?.length ? "idle" : "finished");
+  }, [clearReplayTimers, round, state.phase, winningReplayMoves?.length]);
+
+  const playWinningReplay = React.useCallback(() => {
+    if (!round || !winningReplayMoves?.length || !["roundResult", "gameResult"].includes(state.phase)) return;
+
+    clearReplayTimers();
     let replayRobots = round.initialRobots;
-    const timers: number[] = [];
     setLocal({ robots: replayRobots, moveHistory: [] });
+    setReplayStatus("playing");
 
-    winningMoves.forEach((move, index) => {
+    winningReplayMoves.forEach((move, index) => {
       const timer = window.setTimeout(() => {
         const nextRobots = applyMove(round.board, replayRobots, move);
         if (nextRobots) replayRobots = nextRobots;
         setLocal({
           robots: replayRobots,
-          moveHistory: winningMoves.slice(0, index + 1)
+          moveHistory: winningReplayMoves.slice(0, index + 1)
         });
+        if (index === winningReplayMoves.length - 1) {
+          setReplayStatus("finished");
+          replayTimersRef.current = [];
+        }
       }, 520 * (index + 1));
-      timers.push(timer);
+      replayTimersRef.current.push(timer);
     });
+  }, [clearReplayTimers, round, state.phase, winningReplayMoves]);
 
-    return () => {
-      timers.forEach((timer) => window.clearTimeout(timer));
-    };
-  }, [round?.roundNumber, round?.startedAt, state.phase, state.lastRoundResult?.winningSubmission?.submittedAt]);
+  React.useEffect(() => {
+    playWinningReplay();
+    return clearReplayTimers;
+  }, [playWinningReplay, clearReplayTimers, round?.roundNumber, round?.startedAt, state.lastRoundResult?.winningSubmission?.submittedAt]);
 
   function moveRobot(robot: RobotColor, dx: number, dy: number): void {
     if (!round || state.phase !== "playing") return;
@@ -1008,6 +1048,10 @@ function Room({
             onSubmit={submit}
             isSubmitting={isSubmittingSolution}
             useRasterAssets={useRasterAssets}
+            replayAvailable={replayAvailable}
+            replayStatus={replayStatus}
+            onReplayReset={resetWinningReplay}
+            onReplayPlay={playWinningReplay}
           />
         </section>
       </section>
