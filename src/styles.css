@@ -482,6 +482,34 @@ label {
   box-shadow: 0 -8px 14px rgba(248, 250, 251, 0.92);
 }
 
+.final-screen {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.final-layout {
+  display: grid;
+  width: min(620px, 100%);
+  min-height: 0;
+  align-content: center;
+  justify-self: center;
+  gap: 12px;
+}
+
+.final-layout .result {
+  max-height: min(72dvh, 560px);
+  padding: 20px;
+  font-size: 1rem;
+}
+
+.final-layout .result h2 {
+  font-size: clamp(1.8rem, 8vw, 3.2rem);
+  line-height: 1.05;
+}
+
+.final-layout > button {
+  justify-self: stretch;
+}
+
 .toast-stack {
   position: fixed;
   right: 16px;
@@ -671,6 +699,16 @@ label {
   .room-actions,
   .result {
     font-size: 0.76rem;
+  }
+
+  .final-layout {
+    align-content: start;
+  }
+
+  .final-layout .result {
+    max-height: none;
+    padding: 16px;
+    font-size: 0.95rem;
   }
 
   .player {

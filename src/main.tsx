@@ -634,7 +634,17 @@ function GameControls({
   );
 }
 
-function RoundResultView({ result, state, ws }: { result: RoundResult; state: PublicRoomState; ws: WebSocket | null }) {
+function RoundResultView({
+  result,
+  state,
+  ws,
+  onShowGameResult
+}: {
+  result: RoundResult;
+  state: PublicRoomState;
+  ws: WebSocket | null;
+  onShowGameResult?: () => void;
+}) {
   const winner = state.players.find((player) => player.id === result.winnerPlayerId);
   const [isLoadingNext, setIsLoadingNext] = React.useState(false);
 
@@ -666,6 +676,10 @@ function RoundResultView({ result, state, ws }: { result: RoundResult; state: Pu
           }}
         >
           {isLoadingNext ? <LoadingLabel label="準備中..." /> : <><StepForward size={18} /> 次のラウンド</>}
+        </button>
+      ) : state.phase === "gameResult" && onShowGameResult ? (
+        <button onClick={onShowGameResult}>
+          <StepForward size={18} /> 最終結果へ
         </button>
       ) : null}
     </section>
@@ -714,6 +728,7 @@ function Room({
   const [isStarting, setIsStarting] = React.useState(false);
   const [isForcingRoundEnd, setIsForcingRoundEnd] = React.useState(false);
   const [isSubmittingSolution, setIsSubmittingSolution] = React.useState(false);
+  const [isFinalResultOpen, setIsFinalResultOpen] = React.useState(false);
   const submitInFlightRef = React.useRef(false);
   const now = useNow();
 
@@ -739,6 +754,12 @@ function Room({
     setIsSubmittingSolution(false);
     submitInFlightRef.current = false;
   }, [error]);
+
+  React.useEffect(() => {
+    if (state.phase !== "gameResult") {
+      setIsFinalResultOpen(false);
+    }
+  }, [state.phase]);
 
   React.useEffect(() => {
     if (!acceptedSubmission) return;
@@ -869,12 +890,47 @@ function Room({
   const hasSubmitted = Boolean(round?.submissionSummary.submittedPlayerIds.includes(playerId));
   const assetsSettled = assetState !== "loading";
   const useRasterAssets = assetState === "ready";
+  const shouldShowFinalResultScreen = state.phase === "gameResult" && (isFinalResultOpen || !state.lastRoundResult);
 
   React.useEffect(() => {
     if (!hasSubmitted) return;
     setIsSubmittingSolution(false);
     submitInFlightRef.current = false;
   }, [hasSubmitted]);
+
+  if (shouldShowFinalResultScreen) {
+    return (
+      <main className="app-shell phase-gameResult final-screen">
+        <header className="topbar">
+          <div>
+            <span className="eyebrow">部屋</span>
+            <strong>{state.roomId}</strong>
+          </div>
+          <button className="secondary icon" title="部屋URLをコピー" onClick={() => navigator.clipboard.writeText(roomUrl)}>
+            <Copy size={18} />
+          </button>
+          <div>
+            <span className="eyebrow">ラウンド</span>
+            <strong>{state.totalRounds} / {state.totalRounds}</strong>
+          </div>
+          <div>
+            <span className="eyebrow">残り時間</span>
+            <strong>--:--</strong>
+          </div>
+          <button className="secondary topbar-end" onClick={leaveToLobby}>
+            <LogOut size={18} /> <span>ゲーム終了</span>
+          </button>
+        </header>
+
+        <section className="final-layout">
+          <GameResultView state={state} />
+          <button className="secondary" onClick={leaveToLobby}>
+            <LogOut size={18} /> ゲーム終了
+          </button>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className={`app-shell phase-${state.phase}`}>
@@ -924,8 +980,14 @@ function Room({
               <LogOut size={18} /> ゲーム終了
             </button>
           </section>
-          {state.lastRoundResult ? <RoundResultView result={state.lastRoundResult} state={state} ws={ws} /> : null}
-          {state.phase === "gameResult" ? <GameResultView state={state} /> : null}
+          {state.lastRoundResult ? (
+            <RoundResultView
+              result={state.lastRoundResult}
+              state={state}
+              ws={ws}
+              onShowGameResult={state.phase === "gameResult" ? () => setIsFinalResultOpen(true) : undefined}
+            />
+          ) : null}
         </aside>
 
         <section className="play-area">
