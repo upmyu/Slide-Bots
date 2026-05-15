@@ -894,8 +894,8 @@ function Room({
   const shouldShowFinalResultScreen = state.phase === "gameResult" && (isFinalResultOpen || !state.lastRoundResult);
   const remainingMs = round ? round.deadline - now : 0;
   const isFinalMinute = state.phase === "playing" && Boolean(round) && remainingMs > 0 && remainingMs <= finalMinuteMs;
-  const shouldRevealTime = state.phase !== "playing" || remainingMs <= finalMinuteMs;
-  const timeLabel = round ? (shouldRevealTime ? formatTime(remainingMs) : "??:??") : "--:--";
+  const timeLabel =
+    round && state.phase === "playing" ? (remainingMs <= finalMinuteMs ? formatTime(remainingMs) : "??:??") : "--:--";
 
   React.useEffect(() => {
     if (!hasSubmitted) return;
