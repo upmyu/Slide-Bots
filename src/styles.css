@@ -243,16 +243,26 @@ label {
   min-height: 0;
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 8px;
+  width: 100%;
   justify-items: center;
   align-items: center;
 }
 
+.board-frame {
+  container-type: size;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  place-items: center;
+}
+
 .board {
   display: block;
-  width: min(calc(100vw - 330px), calc(100dvh - 210px), 780px);
-  height: min(calc(100vw - 330px), calc(100dvh - 210px), 780px);
-  max-width: 100%;
+  width: min(100cqw, 100cqh, 780px);
+  height: min(100cqw, 100cqh, 780px);
   min-width: 0;
+  min-height: 0;
   aspect-ratio: 1;
   touch-action: none;
   border: 1px solid #596878;
@@ -614,7 +624,7 @@ label {
   }
 
   .players {
-    max-height: 56px;
+    max-height: 82px;
   }
 
   .room-actions {
@@ -643,10 +653,8 @@ label {
 
   .phase-roundResult .board,
   .phase-gameResult .board {
-    width: min(calc(100vw - 12px), calc(100dvh - 300px));
-    height: min(calc(100vw - 12px), calc(100dvh - 300px));
-    min-width: min(240px, calc(100vw - 12px));
-    min-height: min(240px, calc(100vw - 12px));
+    width: min(100cqw, 100cqh);
+    height: min(100cqw, 100cqh);
   }
 
   .phase-roundResult .controls,
@@ -670,10 +678,8 @@ label {
   }
 
   .board {
-    width: min(calc(100vw - 12px), calc(100dvh - 360px));
-    height: min(calc(100vw - 12px), calc(100dvh - 360px));
-    min-width: 220px;
-    min-height: 220px;
+    width: min(100cqw, 100cqh);
+    height: min(100cqw, 100cqh);
   }
 
   .buttons {

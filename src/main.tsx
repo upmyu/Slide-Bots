@@ -929,7 +929,9 @@ function Room({
         </aside>
 
         <section className="play-area">
-          <BoardView board={board} robots={robots} target={target} showActiveTarget={Boolean(round)} onMove={moveRobot} useRasterAssets={useRasterAssets} />
+          <div className="board-frame">
+            <BoardView board={board} robots={robots} target={target} showActiveTarget={Boolean(round)} onMove={moveRobot} useRasterAssets={useRasterAssets} />
+          </div>
           <GameControls
             state={state}
             local={local}
