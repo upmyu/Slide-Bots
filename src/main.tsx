@@ -24,6 +24,7 @@ type AcceptedSubmission = {
 type AssetLoadState = "loading" | "ready" | "fallback";
 
 const gameImageUrls = Array.from(new Set([...allPieceImages, ...allTargetImages]));
+const finalMinuteMs = 60 * 1000;
 
 const colorName: Record<TargetColor, string> = {
   red: "赤",
@@ -783,7 +784,7 @@ function Room({
       robots: round.initialRobots,
       moveHistory: []
     });
-  }, [round?.roundNumber, round?.deadline]);
+  }, [round?.roundNumber, round?.startedAt]);
 
   const board = round?.board ?? fixedBoard;
   const target = round?.target ?? fixedBoard.targets[0];
@@ -820,7 +821,7 @@ function Room({
     return () => {
       timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [round?.roundNumber, round?.deadline, state.phase, state.lastRoundResult?.winningSubmission?.submittedAt]);
+  }, [round?.roundNumber, round?.startedAt, state.phase, state.lastRoundResult?.winningSubmission?.submittedAt]);
 
   function moveRobot(robot: RobotColor, dx: number, dy: number): void {
     if (!round || state.phase !== "playing") return;
@@ -891,6 +892,10 @@ function Room({
   const assetsSettled = assetState !== "loading";
   const useRasterAssets = assetState === "ready";
   const shouldShowFinalResultScreen = state.phase === "gameResult" && (isFinalResultOpen || !state.lastRoundResult);
+  const remainingMs = round ? round.deadline - now : 0;
+  const isFinalMinute = state.phase === "playing" && Boolean(round) && remainingMs > 0 && remainingMs <= finalMinuteMs;
+  const shouldRevealTime = state.phase !== "playing" || remainingMs <= finalMinuteMs;
+  const timeLabel = round ? (shouldRevealTime ? formatTime(remainingMs) : "??:??") : "--:--";
 
   React.useEffect(() => {
     if (!hasSubmitted) return;
@@ -946,9 +951,9 @@ function Room({
           <span className="eyebrow">ラウンド</span>
           <strong>{round ? `${round.roundNumber} / ${state.totalRounds}` : `0 / ${state.totalRounds}`}</strong>
         </div>
-        <div>
+        <div className={`time-card${isFinalMinute ? " final-minute" : ""}`}>
           <span className="eyebrow">残り時間</span>
-          <strong>{round ? formatTime(round.deadline - now) : "--:--"}</strong>
+          <strong aria-live="polite">{timeLabel}</strong>
         </div>
         <button className="secondary topbar-end" onClick={leaveToLobby}>
           <LogOut size={18} /> <span>ゲーム終了</span>

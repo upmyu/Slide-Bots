@@ -27,6 +27,7 @@ const isProduction = process.env.NODE_ENV === "production";
 const port = Number(process.env.PORT ?? 5173);
 const totalRounds = 10;
 const roundTimeSeconds = 150;
+const finalMinuteSeconds = 60;
 const maxPlayers = 10;
 const maxRooms = 500;
 const roomIdleTimeoutMs = 30 * 60 * 1000;
@@ -206,6 +207,7 @@ function publicState(room: ManagedRoom): PublicRoomState {
           board: room.currentRound.board,
           initialRobots: room.currentRound.initialRobots,
           target: room.currentRound.target,
+          startedAt: room.currentRound.startedAt,
           deadline: room.currentRound.deadline,
           submissionSummary: {
             submittedPlayerIds: room.currentRound.submissions.map((submission) => submission.playerId)
@@ -220,6 +222,21 @@ function broadcast(room: ManagedRoom): void {
   for (const ws of room.sockets.values()) {
     send(ws, { type: "roomState", state });
   }
+}
+
+function scheduleRoundTimer(room: ManagedRoom): void {
+  if (room.roundTimer) clearTimeout(room.roundTimer);
+  const remainingMs = room.currentRound ? Math.max(0, room.currentRound.deadline - Date.now()) : 0;
+  room.roundTimer = setTimeout(() => finishRound(room), remainingMs + 250);
+}
+
+function shortenToFinalMinute(room: ManagedRoom): void {
+  if (!room.currentRound) return;
+  const now = Date.now();
+  const finalMinuteDeadline = now + finalMinuteSeconds * 1000;
+  if (room.currentRound.deadline <= finalMinuteDeadline) return;
+  room.currentRound.deadline = finalMinuteDeadline;
+  scheduleRoundTimer(room);
 }
 
 function normalizeName(name: string): string {
@@ -323,8 +340,7 @@ async function startRound(room: ManagedRoom, roundNumber: number): Promise<void>
     submissions: []
   };
   room.usedTargetKeys = [...(room.usedTargetKeys ?? []), targetKey(setup.target)];
-  if (room.roundTimer) clearTimeout(room.roundTimer);
-  room.roundTimer = setTimeout(() => finishRound(room), room.roundTimeSeconds * 1000 + 250);
+  scheduleRoundTimer(room);
   touchRoom(room);
   broadcast(room);
 }
@@ -434,6 +450,7 @@ function submitSolution(room: ManagedRoom, playerId: string, moves: Move[], ws: 
   }
 
   touchRoom(room);
+  shortenToFinalMinute(room);
   send(ws, { type: "submissionAccepted", moveCount: moves.length });
   broadcast(room);
 }

@@ -99,6 +99,7 @@ export type PublicRoomState = {
     board: Board;
     initialRobots: RobotPositions;
     target: Target;
+    startedAt: number;
     deadline: number;
     submissionSummary: {
       submittedPlayerIds: string[];

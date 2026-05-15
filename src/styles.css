@@ -141,6 +141,63 @@ label {
   padding: 6px 10px;
 }
 
+.time-card {
+  position: relative;
+  overflow: hidden;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.time-card strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.time-card.final-minute {
+  border-color: #d43d35;
+  background: #fff2f0;
+  color: #8e211d;
+  box-shadow: 0 0 0 3px rgba(212, 61, 53, 0.16);
+  animation: final-minute-pop 700ms ease-out both, final-minute-pulse 1.15s ease-in-out 700ms infinite;
+}
+
+.time-card.final-minute .eyebrow {
+  color: #a52722;
+}
+
+@keyframes final-minute-pop {
+  0% {
+    transform: scale(0.96);
+  }
+
+  55% {
+    transform: scale(1.05);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes final-minute-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(212, 61, 53, 0.16);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px rgba(212, 61, 53, 0.26);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .time-card.final-minute {
+    animation: none;
+  }
+}
+
 .topbar-end {
   min-height: 46px;
   white-space: nowrap;
