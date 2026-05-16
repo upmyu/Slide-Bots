@@ -26,6 +26,7 @@ type AssetLoadState = "loading" | "ready" | "fallback";
 
 const gameImageUrls = Array.from(new Set([...allPieceImages, ...allTargetImages]));
 const finalMinuteMs = 60 * 1000;
+const roundCountOptions = [1, 3, 5, 10, 15, 20];
 
 const colorName: Record<TargetColor, string> = {
   red: "赤",
@@ -506,6 +507,7 @@ function BoardView({
 function Lobby({ ws, socketReady, playerId, error }: { ws: WebSocket | null; socketReady: boolean; playerId: string; error: string }) {
   const [name, setName] = React.useState(localStorage.getItem("slideBots.name") ?? "");
   const [roomId, setRoomId] = React.useState(savedRoomId());
+  const [totalRounds, setTotalRounds] = React.useState(() => Number(localStorage.getItem("slideBots.totalRounds") ?? 10));
   const [pendingAction, setPendingAction] = React.useState<LobbyPendingAction>(null);
   const canSend = socketReady && isSocketOpen(ws);
 
@@ -519,6 +521,7 @@ function Lobby({ ws, socketReady, playerId, error }: { ws: WebSocket | null; soc
 
   function remember(): void {
     localStorage.setItem("slideBots.name", name);
+    localStorage.setItem("slideBots.totalRounds", String(totalRounds));
   }
 
   return (
@@ -532,11 +535,21 @@ function Lobby({ ws, socketReady, playerId, error }: { ws: WebSocket | null; soc
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder="あなたの名前" />
       </label>
       <div className="join-actions">
+        <label>
+          ラウンド数
+          <select value={totalRounds} onChange={(event) => setTotalRounds(Number(event.target.value))}>
+            {roundCountOptions.map((rounds) => (
+              <option key={rounds} value={rounds}>
+                {rounds}ラウンド
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           disabled={!canSend || pendingAction !== null}
           onClick={() => {
             remember();
-            if (sendJson(ws, { type: "createRoom", name, playerId })) {
+            if (sendJson(ws, { type: "createRoom", name, playerId, totalRounds })) {
               setPendingAction("create");
             }
           }}

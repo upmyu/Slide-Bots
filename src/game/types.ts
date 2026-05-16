@@ -108,7 +108,7 @@ export type PublicRoomState = {
 };
 
 export type ClientMessage =
-  | { type: "createRoom"; name: string; playerId?: string }
+  | { type: "createRoom"; name: string; playerId?: string; totalRounds?: number }
   | { type: "joinRoom"; roomId: string; name: string; playerId?: string }
   | { type: "startGame" }
   | { type: "forceEndRound" }

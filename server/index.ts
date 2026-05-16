@@ -25,7 +25,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const isProduction = process.env.NODE_ENV === "production";
 const port = Number(process.env.PORT ?? 5173);
-const totalRounds = 10;
+const defaultTotalRounds = 10;
+const minTotalRounds = 1;
+const maxTotalRounds = 20;
 const roundTimeSeconds = 150;
 const finalMinuteSeconds = 60;
 const maxPlayers = 10;
@@ -244,6 +246,12 @@ function normalizeName(name: string): string {
   return trimmed || `プレイヤー${randomId(2)}`;
 }
 
+function normalizeTotalRounds(value: unknown): number {
+  const rounds = typeof value === "number" ? Math.trunc(value) : Number.NaN;
+  if (!Number.isFinite(rounds)) return defaultTotalRounds;
+  return Math.min(maxTotalRounds, Math.max(minTotalRounds, rounds));
+}
+
 function attachPlayer(room: ManagedRoom, ws: WebSocket, playerId: string, name: string): Player {
   let player = room.players.find((candidate) => candidate.id === playerId);
   if (!player) {
@@ -267,7 +275,7 @@ function attachPlayer(room: ManagedRoom, ws: WebSocket, playerId: string, name: 
   return player;
 }
 
-function createRoom(ws: WebSocket, name: string, requestedPlayerId?: string): void {
+function createRoom(ws: WebSocket, name: string, requestedPlayerId?: string, requestedTotalRounds?: number): void {
   if (rooms.size >= maxRooms) {
     sweepRooms();
   }
@@ -281,7 +289,7 @@ function createRoom(ws: WebSocket, name: string, requestedPlayerId?: string): vo
     roomId,
     phase: "waiting",
     players: [],
-    totalRounds,
+    totalRounds: normalizeTotalRounds(requestedTotalRounds),
     roundTimeSeconds,
     sockets: new Map(),
     lastActivityAt: Date.now()
@@ -505,7 +513,7 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
   const room = context?.roomId ? rooms.get(context.roomId) : undefined;
 
   if (message.type === "createRoom") {
-    createRoom(ws, message.name, message.playerId);
+    createRoom(ws, message.name, message.playerId, message.totalRounds);
     return;
   }
   if (message.type === "joinRoom") {
