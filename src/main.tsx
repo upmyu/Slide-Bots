@@ -756,7 +756,7 @@ function Room({
   const now = useNow();
 
   React.useEffect(() => {
-    if (state.phase !== "waiting" || round) {
+    if ((state.phase !== "waiting" && state.phase !== "gameResult") || round) {
       setIsStarting(false);
     }
     if (state.phase !== "playing") {
@@ -969,9 +969,14 @@ function Room({
 
         <section className="final-layout">
           <GameResultView state={state} />
-          <button className="secondary" onClick={leaveToLobby}>
-            <LogOut size={18} /> ゲーム終了
-          </button>
+          <div className="final-actions">
+            <button onClick={startGame} disabled={isStarting || !socketReady || !isSocketOpen(ws)}>
+              {isStarting ? <LoadingLabel label="準備中..." /> : <><RotateCcw size={18} /> もう一度やる</>}
+            </button>
+            <button className="secondary" onClick={leaveToLobby}>
+              <LogOut size={18} /> ゲーム終了
+            </button>
+          </div>
         </section>
       </main>
     );

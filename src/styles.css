@@ -581,7 +581,13 @@ label {
   line-height: 1.05;
 }
 
-.final-layout > button {
+.final-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.final-actions > button {
   justify-self: stretch;
 }
 
@@ -784,6 +790,10 @@ label {
     max-height: none;
     padding: 16px;
     font-size: 0.95rem;
+  }
+
+  .final-actions {
+    grid-template-columns: 1fr;
   }
 
   .player {

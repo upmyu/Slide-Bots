@@ -346,7 +346,7 @@ async function startRound(room: ManagedRoom, roundNumber: number): Promise<void>
 }
 
 function startGame(room: ManagedRoom): void {
-  if (room.phase !== "waiting") return;
+  if (room.phase !== "waiting" && room.phase !== "gameResult") return;
   if (room.players.length < 1) return;
   room.players.forEach((player) => {
     player.score = 0;
